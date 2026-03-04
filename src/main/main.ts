@@ -9,6 +9,7 @@ import { CopilotSessionWatcher } from './copilot-session-watcher';
 import { notifyCopilotSession, clearNotificationCooldowns } from './copilot-notification';
 import { ClaudeCodeSessionMonitor } from './claude-code-session-monitor';
 import { ClaudeCodeSessionWatcher } from './claude-code-session-watcher';
+import { VersionChecker } from './version-checker';
 
 declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string | undefined;
 declare const MAIN_WINDOW_VITE_NAME: string;
@@ -20,6 +21,7 @@ let copilotMonitor: CopilotSessionMonitor | null = null;
 let copilotWatcher: CopilotSessionWatcher | null = null;
 let claudeCodeMonitor: ClaudeCodeSessionMonitor | null = null;
 let claudeCodeWatcher: ClaudeCodeSessionWatcher | null = null;
+let versionChecker: VersionChecker | null = null;
 const sessionStore = new Store({ name: 'tmax-session' });
 const detachedWindows = new Map<string, BrowserWindow>();
 
@@ -312,6 +314,19 @@ function registerIpcHandlers(): void {
   ipcMain.handle(IPC.CLAUDE_CODE_GET_PROMPTS, (_event, id: string) => {
     return claudeCodeMonitor?.getPrompts(id) ?? [];
   });
+
+  // ── Version check IPC handlers ──────────────────────────────────────
+  ipcMain.handle(IPC.VERSION_GET_APP_VERSION, () => {
+    return app.getVersion();
+  });
+
+  ipcMain.handle(IPC.VERSION_GET_UPDATE, () => {
+    return versionChecker?.getUpdateInfo() ?? null;
+  });
+
+  ipcMain.handle(IPC.VERSION_CHECK_NOW, () => {
+    return versionChecker?.checkNow() ?? null;
+  });
 }
 
 function setupCopilotMonitor(): void {
@@ -399,6 +414,9 @@ app.whenReady().then(() => {
     console.log('Window created');
     registerIpcHandlers();
     console.log('IPC handlers registered');
+    versionChecker = new VersionChecker(mainWindow!);
+    versionChecker.start();
+    console.log('Version checker started');
   } catch (error) {
     console.error('Startup error:', error);
   }
@@ -416,6 +434,7 @@ app.on('window-all-closed', async () => {
   copilotMonitor?.dispose();
   await claudeCodeWatcher?.stop();
   claudeCodeMonitor?.dispose();
+  versionChecker?.stop();
   clearNotificationCooldowns();
   app.quit();
 });

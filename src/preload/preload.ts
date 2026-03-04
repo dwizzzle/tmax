@@ -20,6 +20,10 @@ export interface TerminalAPI {
   setConfig(key: string, value: unknown): Promise<void>;
   clipboardRead(): string;
   clipboardWrite(text: string): void;
+  getAppVersion(): Promise<string>;
+  getVersionUpdate(): Promise<{ current: string; latest: string; url: string } | null>;
+  checkForUpdates(): Promise<{ current: string; latest: string; url: string } | null>;
+  onNewVersionAvailable(cb: (info: { current: string; latest: string; url: string }) => void): () => void;
 }
 
 const terminalAPI: TerminalAPI = {
@@ -220,6 +224,29 @@ const terminalAPI: TerminalAPI = {
     ipcRenderer.on(IPC.CLAUDE_CODE_SESSION_REMOVED, listener);
     return () => {
       ipcRenderer.removeListener(IPC.CLAUDE_CODE_SESSION_REMOVED, listener);
+    };
+  },
+
+  // ── Version check APIs ──────────────────────────────────────────
+  getAppVersion() {
+    return ipcRenderer.invoke(IPC.VERSION_GET_APP_VERSION);
+  },
+
+  getVersionUpdate() {
+    return ipcRenderer.invoke(IPC.VERSION_GET_UPDATE);
+  },
+
+  checkForUpdates() {
+    return ipcRenderer.invoke(IPC.VERSION_CHECK_NOW);
+  },
+
+  onNewVersionAvailable(cb: (info: { current: string; latest: string; url: string }) => void): () => void {
+    const listener = (_event: Electron.IpcRendererEvent, info: { current: string; latest: string; url: string }) => {
+      cb(info);
+    };
+    ipcRenderer.on(IPC.VERSION_NEW_AVAILABLE, listener);
+    return () => {
+      ipcRenderer.removeListener(IPC.VERSION_NEW_AVAILABLE, listener);
     };
   },
 

@@ -872,6 +872,16 @@ body,
   color: var(--text-secondary);
 }
 
+.status-update-available {
+  color: #4ec957;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.status-update-available:hover {
+  text-decoration: underline;
+}
+
 .status-cwd {
   color: var(--text-secondary);
   cursor: pointer;

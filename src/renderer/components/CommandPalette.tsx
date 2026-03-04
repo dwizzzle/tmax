@@ -64,6 +64,9 @@ const CommandPalette: React.FC = () => {
       { id: 'toggleTabBar', label: 'Toggle Tab Bar: Top / Left', action: () => store().toggleTabBarPosition() },
       { id: 'shortcuts', label: 'Show Keyboard Shortcuts', shortcut: 'Ctrl+Shift+/', action: () => store().toggleShortcuts() },
       { id: 'settings', label: 'Open Settings', shortcut: 'Ctrl+,', action: () => store().toggleSettings() },
+      { id: 'checkForUpdates', label: 'Check for Updates', action: () => {
+        window.terminalAPI.checkForUpdates();
+      }},
       { id: 'editConfig', label: 'Open Settings JSON File', action: () => {
         // Open the config JSON in the default editor
         window.terminalAPI.openConfigFile?.();

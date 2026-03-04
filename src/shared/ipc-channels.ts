@@ -33,6 +33,10 @@ export const IPC = {
   CLAUDE_CODE_START_WATCHING: 'claude-code:startWatching',
   CLAUDE_CODE_STOP_WATCHING: 'claude-code:stopWatching',
   CLAUDE_CODE_GET_PROMPTS: 'claude-code:getPrompts',
+  VERSION_NEW_AVAILABLE: 'version:newAvailable',
+  VERSION_GET_UPDATE: 'version:getUpdate',
+  VERSION_CHECK_NOW: 'version:checkNow',
+  VERSION_GET_APP_VERSION: 'version:getAppVersion',
 } as const;
 
 export type IpcChannel = (typeof IPC)[keyof typeof IPC];

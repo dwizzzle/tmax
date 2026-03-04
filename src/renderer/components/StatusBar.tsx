@@ -1,8 +1,21 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useTerminalStore } from '../state/terminal-store';
 import { getLeafOrder } from '../state/terminal-store';
 
 const StatusBar: React.FC = () => {
+  const [appVersion, setAppVersion] = useState<string>('');
+  const [updateInfo, setUpdateInfo] = useState<{ current: string; latest: string; url: string } | null>(null);
+
+  useEffect(() => {
+    window.terminalAPI.getAppVersion().then(setAppVersion);
+    window.terminalAPI.getVersionUpdate().then((info) => {
+      if (info) setUpdateInfo(info);
+    });
+    const cleanup = window.terminalAPI.onNewVersionAvailable((info) => {
+      setUpdateInfo(info);
+    });
+    return cleanup;
+  }, []);
   const terminals = useTerminalStore((s) => s.terminals);
   const focusedId = useTerminalStore((s) => s.focusedTerminalId);
   const layout = useTerminalStore((s) => s.layout);
@@ -59,7 +72,17 @@ const StatusBar: React.FC = () => {
           {floatingCount > 0 ? ` (${tiledCount} tiled, ${floatingCount} floating)` : ''}
         </span>
         <span className="status-dim">{Math.round((fontSize / (config?.terminal?.fontSize ?? 14)) * 100)}%</span>
-        <span className="status-dim">v1.0.0</span>
+        {updateInfo ? (
+          <span
+            className="status-update-available"
+            onClick={() => window.open(updateInfo.url, '_blank')}
+            title={`Update available: v${updateInfo.latest} (click to download)`}
+          >
+            v{appVersion} → v{updateInfo.latest}
+          </span>
+        ) : (
+          <span className="status-dim">v{appVersion}</span>
+        )}
         <button
           className="status-help-btn"
           onClick={() => useTerminalStore.getState().toggleCommandPalette()}
