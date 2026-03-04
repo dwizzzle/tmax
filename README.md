@@ -51,12 +51,15 @@ Built with Electron, React, TypeScript, xterm.js, and node-pty.
 - Named layouts: save and load terminal arrangements with titles and working directories
 - Startup commands per terminal -- restored when loading a layout
 
+**External Links**
+- Links open in your default browser, not inside the app
+
 **Configurable Everything**
 - Settings UI (`Ctrl+,`) with tabs for Terminal, Keybindings, Shells, and Theme
 - Re-record any keybinding by clicking it
 - Add/remove shell profiles (PowerShell, CMD, WSL, or any executable)
 - Set default start folder globally or per shell
-- 10 built-in color themes
+- 10 built-in color themes (or create your own with color pickers)
 
 ## Keyboard Shortcuts
 
@@ -82,23 +85,6 @@ Built with Electron, React, TypeScript, xterm.js, and node-pty.
 | `Ctrl+Shift+/` | Show all shortcuts |
 
 All shortcuts are remappable in Settings > Keybindings.
-
-## Color Themes
-
-Switch themes from the command palette (type "theme"):
-
-- **Catppuccin Mocha** (default)
-- **Dracula**
-- **Nord**
-- **Gruvbox Dark**
-- **Tokyo Night**
-- **Solarized Dark**
-- **One Dark**
-- **Solarized Light**
-- **GitHub Light**
-- **Catppuccin Latte**
-
-Or create your own in Settings > Theme with color pickers.
 
 ## Tab Context Menu
 
