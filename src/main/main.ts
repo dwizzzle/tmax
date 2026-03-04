@@ -87,6 +87,22 @@ function createWindow(): void {
     console.log(`[RENDERER ${prefix}] ${message} (${sourceId}:${line})`);
   });
 
+  // Open external links in the default browser instead of in-app
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      shell.openExternal(url);
+    }
+    return { action: 'deny' };
+  });
+
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    const currentURL = mainWindow?.webContents.getURL();
+    if (url !== currentURL && (url.startsWith('http://') || url.startsWith('https://'))) {
+      event.preventDefault();
+      shell.openExternal(url);
+    }
+  });
+
   mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
     console.error('Failed to load:', errorCode, errorDescription);
   });
@@ -195,6 +211,22 @@ function registerIpcHandlers(): void {
 
     detachedWin.setMenuBarVisibility(false);
     detachedWindows.set(terminalId, detachedWin);
+
+    // Open external links in the default browser for detached windows too
+    detachedWin.webContents.setWindowOpenHandler(({ url }) => {
+      if (url.startsWith('http://') || url.startsWith('https://')) {
+        shell.openExternal(url);
+      }
+      return { action: 'deny' };
+    });
+
+    detachedWin.webContents.on('will-navigate', (event, url) => {
+      const currentURL = detachedWin.webContents.getURL();
+      if (url !== currentURL && (url.startsWith('http://') || url.startsWith('https://'))) {
+        event.preventDefault();
+        shell.openExternal(url);
+      }
+    });
 
     detachedWin.on('closed', () => {
       detachedWindows.delete(terminalId);
