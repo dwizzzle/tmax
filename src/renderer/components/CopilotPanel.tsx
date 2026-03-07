@@ -102,45 +102,11 @@ const CopilotPanel: React.FC = () => {
   const ctxRef = useRef<HTMLDivElement>(null);
   const renameRef = useRef<HTMLInputElement>(null);
 
-  // Start/stop watching when panel opens/closes
+  // Refresh session lists when panel opens
   useEffect(() => {
     if (!show) return;
-
-    const api = window.terminalAPI as any;
-    api.startCopilotWatching?.();
-    api.startClaudeCodeWatching?.();
     useTerminalStore.getState().loadCopilotSessions();
     useTerminalStore.getState().loadClaudeCodeSessions();
-
-    const unsubCopilotUpdated = api.onCopilotSessionUpdated?.((session: CopilotSessionSummary) => {
-      useTerminalStore.getState().updateCopilotSession(session);
-    });
-    const unsubCopilotAdded = api.onCopilotSessionAdded?.((session: CopilotSessionSummary) => {
-      useTerminalStore.getState().addCopilotSession(session);
-    });
-    const unsubCopilotRemoved = api.onCopilotSessionRemoved?.((sessionId: string) => {
-      useTerminalStore.getState().removeCopilotSession(sessionId);
-    });
-    const unsubClaudeUpdated = api.onClaudeCodeSessionUpdated?.((session: CopilotSessionSummary) => {
-      useTerminalStore.getState().updateClaudeCodeSession(session);
-    });
-    const unsubClaudeAdded = api.onClaudeCodeSessionAdded?.((session: CopilotSessionSummary) => {
-      useTerminalStore.getState().addClaudeCodeSession(session);
-    });
-    const unsubClaudeRemoved = api.onClaudeCodeSessionRemoved?.((sessionId: string) => {
-      useTerminalStore.getState().removeClaudeCodeSession(sessionId);
-    });
-
-    return () => {
-      api.stopCopilotWatching?.();
-      api.stopClaudeCodeWatching?.();
-      unsubCopilotUpdated?.();
-      unsubCopilotAdded?.();
-      unsubCopilotRemoved?.();
-      unsubClaudeUpdated?.();
-      unsubClaudeAdded?.();
-      unsubClaudeRemoved?.();
-    };
   }, [show]);
 
   useEffect(() => {

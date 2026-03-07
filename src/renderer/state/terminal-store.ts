@@ -385,6 +385,7 @@ interface TerminalStore {
   searchCopilotSessions: (query: string) => Promise<void>;
   openCopilotSession: (sessionId: string) => Promise<void>;
   setCopilotSessions: (sessions: CopilotSessionSummary[]) => void;
+  updateTerminalTitleFromSession: (session: CopilotSessionSummary) => void;
   addCopilotSession: (session: CopilotSessionSummary) => void;
   updateCopilotSession: (session: CopilotSessionSummary) => void;
   removeCopilotSession: (sessionId: string) => void;
@@ -992,7 +993,9 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
     const instance = terminals.get(id);
     if (!instance) return;
     const newTerminals = new Map(terminals);
-    newTerminals.set(id, { ...instance, title, customTitle: custom ?? instance.customTitle });
+    const updatedInstance = { ...instance, title, customTitle: custom ?? instance.customTitle };
+    if (custom) updatedInstance.aiAutoTitle = false;
+    newTerminals.set(id, updatedInstance);
     set({ terminals: newTerminals });
   },
 
@@ -1561,6 +1564,7 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
       shellProfileId: profileId,
       cwd: termCwd,
       customTitle: true,
+      aiAutoTitle: true,
       mode: 'tiled',
       pid,
       lastProcess: '',
@@ -1590,16 +1594,68 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
     set({ copilotSessions: sessions });
   },
 
+  updateTerminalTitleFromSession: (session: CopilotSessionSummary) => {
+    if (!session.summary) return;
+    const { terminals } = get();
+    const newTerminals = new Map(terminals);
+    let changed = false;
+
+    // Check if any terminal already has this session linked
+    let alreadyLinked = false;
+    for (const [, instance] of terminals) {
+      if (instance.aiSessionId === session.id) {
+        alreadyLinked = true;
+        break;
+      }
+    }
+
+    for (const [id, inst] of terminals) {
+      let current = inst;
+      // Match by explicit aiSessionId
+      let matched = current.aiSessionId === session.id;
+
+      // Auto-link: if no terminal has this session yet, match by cwd + process name
+      if (!matched && !alreadyLinked && !current.aiSessionId && session.cwd) {
+        const proc = current.lastProcess.toLowerCase();
+        const titleLower = current.title.toLowerCase();
+        const isClaude = (s: string) => s.includes('claude') || s === 'cc';
+        const isClaudeProcess = isClaude(proc) || isClaude(titleLower);
+        const normCwd = (p: string) => p.replace(/[\\/]+$/, '').replace(/\\/g, '/').toLowerCase();
+        if (isClaudeProcess && normCwd(current.cwd) === normCwd(session.cwd)) {
+          // Link this terminal to the session
+          current = { ...current, aiSessionId: session.id, aiAutoTitle: true, customTitle: true };
+          newTerminals.set(id, current);
+          alreadyLinked = true;
+          matched = true;
+          changed = true;
+        }
+      }
+
+      if (matched && current.aiAutoTitle) {
+        const prefix = session.provider === 'claude-code' ? 'Claude' : 'Copilot';
+        const summary = session.summary.length > 60 ? session.summary.slice(0, 57) + '...' : session.summary;
+        const title = `${prefix}: ${summary}`;
+        if (current.title !== title) {
+          newTerminals.set(id, { ...newTerminals.get(id)!, title });
+          changed = true;
+        }
+      }
+    }
+    if (changed) set({ terminals: newTerminals });
+  },
+
   addCopilotSession: (session: CopilotSessionSummary) => {
     set((s) => ({
       copilotSessions: [...s.copilotSessions.filter((x) => x.id !== session.id), session],
     }));
+    get().updateTerminalTitleFromSession(session);
   },
 
   updateCopilotSession: (session: CopilotSessionSummary) => {
     set((s) => ({
       copilotSessions: s.copilotSessions.map((x) => (x.id === session.id ? session : x)),
     }));
+    get().updateTerminalTitleFromSession(session);
   },
 
   removeCopilotSession: (sessionId: string) => {
@@ -1659,6 +1715,7 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
       shellProfileId: profileId,
       cwd: termCwd,
       customTitle: true,
+      aiAutoTitle: true,
       mode: 'tiled',
       pid,
       lastProcess: '',
@@ -1688,12 +1745,14 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
     set((s) => ({
       claudeCodeSessions: [...s.claudeCodeSessions.filter((x) => x.id !== session.id), session],
     }));
+    get().updateTerminalTitleFromSession(session);
   },
 
   updateClaudeCodeSession: (session: CopilotSessionSummary) => {
     set((s) => ({
       claudeCodeSessions: s.claudeCodeSessions.map((x) => (x.id === session.id ? session : x)),
     }));
+    get().updateTerminalTitleFromSession(session);
   },
 
   removeClaudeCodeSession: (sessionId: string) => {

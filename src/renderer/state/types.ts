@@ -55,6 +55,7 @@ export interface TerminalInstance {
   lastProcess: string;
   startupCommand: string;
   aiSessionId?: string;
+  aiAutoTitle?: boolean;
 }
 
 // ── Configuration ────────────────────────────────────────────────────

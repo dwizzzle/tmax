@@ -5,6 +5,7 @@ import {
   pointerWithin,
 } from '@dnd-kit/core';
 import { useTerminalStore } from './state/terminal-store';
+import type { CopilotSessionSummary } from '../shared/copilot-types';
 import { useKeybindings } from './hooks/useKeybindings';
 import { useDragTerminal } from './hooks/useDragTerminal';
 import TabBar from './components/TabBar';
@@ -90,6 +91,44 @@ const App: React.FC = () => {
       unsubDetached?.();
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Always watch AI sessions so tab titles update even when the panel is closed
+  useEffect(() => {
+    const api = window.terminalAPI as any;
+    api.startCopilotWatching?.();
+    api.startClaudeCodeWatching?.();
+
+    const store = useTerminalStore.getState;
+    const unsubCopilotUpdated = api.onCopilotSessionUpdated?.((session: CopilotSessionSummary) => {
+      store().updateCopilotSession(session);
+    });
+    const unsubCopilotAdded = api.onCopilotSessionAdded?.((session: CopilotSessionSummary) => {
+      store().addCopilotSession(session);
+    });
+    const unsubCopilotRemoved = api.onCopilotSessionRemoved?.((sessionId: string) => {
+      store().removeCopilotSession(sessionId);
+    });
+    const unsubClaudeUpdated = api.onClaudeCodeSessionUpdated?.((session: CopilotSessionSummary) => {
+      store().updateClaudeCodeSession(session);
+    });
+    const unsubClaudeAdded = api.onClaudeCodeSessionAdded?.((session: CopilotSessionSummary) => {
+      store().addClaudeCodeSession(session);
+    });
+    const unsubClaudeRemoved = api.onClaudeCodeSessionRemoved?.((sessionId: string) => {
+      store().removeClaudeCodeSession(sessionId);
+    });
+
+    return () => {
+      api.stopCopilotWatching?.();
+      api.stopClaudeCodeWatching?.();
+      unsubCopilotUpdated?.();
+      unsubCopilotAdded?.();
+      unsubCopilotRemoved?.();
+      unsubClaudeUpdated?.();
+      unsubClaudeAdded?.();
+      unsubClaudeRemoved?.();
+    };
+  }, []);
 
   const draggedTerminal = draggedTerminalId
     ? terminals.get(draggedTerminalId)

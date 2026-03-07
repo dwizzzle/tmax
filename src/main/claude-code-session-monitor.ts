@@ -137,7 +137,8 @@ export class ClaudeCodeSessionMonitor {
       old &&
       (old.status !== summary.status ||
         old.messageCount !== summary.messageCount ||
-        old.toolCallCount !== summary.toolCallCount)
+        old.toolCallCount !== summary.toolCallCount ||
+        old.summary !== summary.summary)
     ) {
       this.callbacks.onSessionUpdated?.(summary);
     }
