@@ -24,6 +24,7 @@ const StatusBar: React.FC = () => {
   const config = useTerminalStore((s) => s.config);
   const viewMode = useTerminalStore((s) => s.viewMode);
   const gridColumns = useTerminalStore((s) => s.gridColumns);
+  const hasAnyColor = useTerminalStore((s) => s.autoColorTabs);
   const focused = focusedId ? terminals.get(focusedId) : null;
   const totalCount = terminals.size;
   const tiledCount = layout.tilingRoot ? getLeafOrder(layout.tilingRoot).length : 0;
@@ -62,10 +63,17 @@ const StatusBar: React.FC = () => {
       <div className="status-section status-right">
         <button
           className="status-mode-btn"
+          onClick={() => useTerminalStore.getState().colorizeAllTabs()}
+          title="Toggle tab colors (Ctrl+Shift+O)"
+        >
+          [{hasAnyColor ? 'Colors ✓' : 'Colors'} Ctrl+Shift+O]
+        </button>
+        <button
+          className="status-mode-btn"
           onClick={() => useTerminalStore.getState().toggleViewMode()}
           title="Toggle view mode (Ctrl+Shift+F)"
         >
-          [{viewMode === 'focus' ? 'Focus' : viewMode === 'grid' ? (gridColumns ? `Grid ${gridColumns}col` : 'Grid') : 'Split'}]
+          [{viewMode === 'focus' ? 'Focus' : viewMode === 'grid' ? (gridColumns ? `Grid ${gridColumns}col` : 'Grid') : 'Split'} Ctrl+Shift+F]
         </button>
         <span className="status-dim">
           {totalCount} terminal{totalCount !== 1 ? 's' : ''}

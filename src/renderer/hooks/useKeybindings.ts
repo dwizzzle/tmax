@@ -74,6 +74,7 @@ const DEFAULT_BINDINGS: Record<string, string> = {
   'Ctrl+Shift+M': 'tabMenu',
   'Ctrl+Shift+C': 'copilotPanel',
   'Ctrl+Shift+L': 'cycleGridColumns',
+  'Ctrl+Shift+O': 'colorizeAllTabs',
 };
 
 export function useKeybindings(): void {
@@ -228,6 +229,9 @@ function dispatchAction(action: string): void {
       break;
     case 'cycleGridColumns':
       store.cycleGridColumns();
+      break;
+    case 'colorizeAllTabs':
+      store.colorizeAllTabs();
       break;
     case 'moveUp':
     case 'moveDown':

@@ -65,7 +65,7 @@ body,
 .tab {
   display: flex;
   align-items: center;
-  padding: 0 16px;
+  padding: 0 26px 0 16px;
   cursor: pointer;
   border-right: 1px solid var(--border-color);
   flex-shrink: 0;
@@ -75,7 +75,6 @@ body,
   font-size: 13px;
   user-select: none;
   transition: background 0.15s ease;
-  gap: 8px;
   min-width: 0;
   max-width: 200px;
 }
@@ -126,6 +125,8 @@ body,
 }
 
 .tab .tab-title {
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -144,6 +145,10 @@ body,
 }
 
 .tab .close-btn {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -233,7 +238,7 @@ body,
   border-right: none;
   border-bottom: 1px solid var(--border-color);
   max-width: unset;
-  padding: 8px 12px;
+  padding: 8px 26px 8px 12px;
 }
 
 .tab-bar.vertical .tab.active {

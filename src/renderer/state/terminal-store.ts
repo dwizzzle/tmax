@@ -13,6 +13,21 @@ import type {
 } from './types';
 import type { CopilotSessionSummary } from '../../shared/copilot-types';
 
+// ── Tab color palette ────────────────────────────────────────────────
+
+export const TAB_COLORS = [
+  { name: 'Red', value: '#ff4444' },
+  { name: 'Green', value: '#44ff44' },
+  { name: 'Blue', value: '#4488ff' },
+  { name: 'Orange', value: '#ff8800' },
+  { name: 'Purple', value: '#aa44ff' },
+  { name: 'Cyan', value: '#00dddd' },
+  { name: 'Pink', value: '#ff44aa' },
+  { name: 'Yellow', value: '#ffdd00' },
+  { name: 'Gray', value: '#888888' },
+  { name: 'Black', value: '#333333' },
+];
+
 // ── Theme → CSS variable sync ────────────────────────────────────────
 
 function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
@@ -317,6 +332,7 @@ interface TerminalStore {
   recentDirs: string[];
   showDirPicker: boolean;
   tabMenuTerminalId: TerminalId | null;
+  autoColorTabs: boolean;
   showCopilotPanel: boolean;
   copilotSessions: CopilotSessionSummary[];
   claudeCodeSessions: CopilotSessionSummary[];
@@ -349,6 +365,7 @@ interface TerminalStore {
   focusDirection: (dir: 'left' | 'right' | 'up' | 'down') => void;
   renameTerminal: (id: TerminalId, title: string) => void;
   setTabColor: (id: TerminalId, color: string | undefined) => void;
+  colorizeAllTabs: () => void;
   setDragging: (isDragging: boolean, terminalId?: TerminalId) => void;
   toggleSwitcher: () => void;
   toggleShortcuts: () => void;
@@ -416,6 +433,7 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
   showCommandPalette: false,
   showSettings: false,
   showDirPicker: false,
+  autoColorTabs: false,
   showCopilotPanel: false,
   copilotSessions: [],
   claudeCodeSessions: [],
@@ -426,7 +444,7 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
   recentDirs: [],
   tabBarPosition: 'top' as 'top' | 'bottom' | 'left' | 'right',
   renamingTerminalId: null,
-  viewMode: 'split' as 'split' | 'focus' | 'grid',
+  viewMode: 'grid' as 'split' | 'focus' | 'grid',
   gridColumns: 0,
   preGridRoot: null as LayoutNode | null,
   selectedTerminalIds: {} as Record<TerminalId, true>,
@@ -462,6 +480,26 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
       rows: 24,
     });
 
+    // Auto-assign a color if colors mode is active — pick the least-used palette color
+    const hasColors = get().autoColorTabs;
+    let tabColor: string | undefined;
+    if (hasColors) {
+      const colorCounts = new Map<string, number>();
+      for (const c of TAB_COLORS) colorCounts.set(c.value, 0);
+      for (const t of terminals.values()) {
+        if (t.tabColor && colorCounts.has(t.tabColor)) {
+          colorCounts.set(t.tabColor, (colorCounts.get(t.tabColor) ?? 0) + 1);
+        }
+      }
+      let minCount = Infinity;
+      for (const [color, count] of colorCounts) {
+        if (count < minCount) {
+          minCount = count;
+          tabColor = color;
+        }
+      }
+    }
+
     const instance: TerminalInstance = {
       id,
       title: profile.name,
@@ -469,6 +507,7 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
       cwd,
       customTitle: false,
       mode: 'tiled',
+      tabColor,
       pid,
       lastProcess: '',
       startupCommand: '',
@@ -483,7 +522,7 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
     if (layout.tilingRoot === null) {
       newRoot = newLeaf;
     } else {
-      // Insert next to the currently focused terminal, or as a right split
+      // Insert next to the last terminal as a right split
       const leafOrder = getLeafOrder(layout.tilingRoot);
       const lastId = leafOrder[leafOrder.length - 1];
       newRoot = insertLeaf(layout.tilingRoot, lastId, id, 'right');
@@ -1010,6 +1049,24 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
     set({ terminals: newTerminals });
   },
 
+  colorizeAllTabs: () => {
+    const { terminals, autoColorTabs } = get();
+    const newTerminals = new Map(terminals);
+    if (autoColorTabs) {
+      for (const [id, instance] of newTerminals) {
+        newTerminals.set(id, { ...instance, tabColor: undefined });
+      }
+      set({ terminals: newTerminals, autoColorTabs: false });
+    } else {
+      let i = 0;
+      for (const [id, instance] of newTerminals) {
+        newTerminals.set(id, { ...instance, tabColor: TAB_COLORS[i % TAB_COLORS.length].value });
+        i++;
+      }
+      set({ terminals: newTerminals, autoColorTabs: true });
+    }
+  },
+
   toggleSwitcher: () => {
     set((state) => ({ showSwitcher: !state.showSwitcher }));
   },
@@ -1399,6 +1456,7 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
       ..._sessionExtras,
       favoriteDirs,
       recentDirs,
+      autoColorTabs: get().autoColorTabs,
       tree: layout.tilingRoot ? serializeNode(layout.tilingRoot) : null,
       floating: layout.floatingPanels.map((p) => {
         const t = terminals.get(p.terminalId);
@@ -1414,6 +1472,10 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
     if (!session) return false;
     // Cache session extras (layouts, etc.) so saveSession doesn't need async load
     _sessionExtras = { ...session };
+
+    if (typeof session.autoColorTabs === 'boolean') {
+      set({ autoColorTabs: session.autoColorTabs });
+    }
 
     const { config } = get();
     if (!config) return false;

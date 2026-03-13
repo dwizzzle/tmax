@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { useTerminalStore } from '../state/terminal-store';
+import { useTerminalStore, TAB_COLORS } from '../state/terminal-store';
 import type { TerminalId } from '../state/types';
 
 export interface ContextMenuPosition {
@@ -22,6 +22,7 @@ const TabContextMenu: React.FC<TabContextMenuProps> = ({ position, onClose }) =>
   const store = useTerminalStore.getState;
   const terminal = useTerminalStore((s) => s.terminals.get(position.terminalId));
   const config = useTerminalStore((s) => s.config);
+  const hasAnyColor = useTerminalStore((s) => s.autoColorTabs);
 
   // Close on outside click or Escape
   useEffect(() => {
@@ -131,17 +132,6 @@ const TabContextMenu: React.FC<TabContextMenuProps> = ({ position, onClose }) =>
   const [editingStartupCmd, setEditingStartupCmd] = useState(false);
   const [startupCmdValue, setStartupCmdValue] = useState('');
   const startupInputRef = useRef<HTMLInputElement>(null);
-
-  const TAB_COLORS = [
-    { name: 'Red', value: '#ff4444' },
-    { name: 'Green', value: '#44ff44' },
-    { name: 'Blue', value: '#4488ff' },
-    { name: 'Orange', value: '#ff8800' },
-    { name: 'Purple', value: '#aa44ff' },
-    { name: 'Cyan', value: '#00dddd' },
-    { name: 'Pink', value: '#ff44aa' },
-    { name: 'Yellow', value: '#ffdd00' },
-  ];
 
   const handleToggleDormant = useCallback(() => {
     if (isDormant) {
@@ -282,6 +272,12 @@ const TabContextMenu: React.FC<TabContextMenuProps> = ({ position, onClose }) =>
                   </button>
                 )}
               </div>
+              <button className="context-menu-item" onClick={() => {
+                store().colorizeAllTabs();
+                onClose();
+              }}>
+                {hasAnyColor ? 'Clear All Tab Colors' : 'Colorize All Tabs'}
+              </button>
             </>
           )}
           <div className="context-menu-separator" />
