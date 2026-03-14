@@ -58,6 +58,8 @@ const Tab: React.FC<TabProps> = ({
   const isDetached = terminal?.mode === 'detached';
   const tabColor = terminal?.tabColor;
   const isSelected = useTerminalStore((s) => !!s.selectedTerminalIds[terminalId]);
+  const isInGrid = useTerminalStore((s) => !!s.gridTabIds[terminalId]);
+  const viewMode = useTerminalStore((s) => s.viewMode);
 
   // Check if this tab's AI session needs attention
   const aiStatus = useTerminalStore((s) => {
@@ -79,7 +81,11 @@ const Tab: React.FC<TabProps> = ({
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.5 : 1,
-    ...(tabColor ? { background: `${tabColor}88`, borderBottom: `3px solid ${tabColor}`, color: '#fff' } : {}),
+    ...(tabColor
+      ? isActive
+        ? { background: `${tabColor}cc`, borderBottom: `3px solid ${tabColor}`, color: '#fff', filter: 'brightness(1.2)' }
+        : { background: `${tabColor}44`, borderBottom: `2px solid ${tabColor}80`, color: '#aaa' }
+      : {}),
   };
 
   const handleMouseDown = useCallback(
@@ -108,7 +114,12 @@ const Tab: React.FC<TabProps> = ({
       data-tab-id={terminalId}
       onClick={(e) => {
         if (e.ctrlKey) {
-          useTerminalStore.getState().toggleSelectTerminal(terminalId);
+          const store = useTerminalStore.getState();
+          // First Ctrl+Click: also select the currently focused tab
+          if (Object.keys(store.selectedTerminalIds).length === 0 && store.focusedTerminalId && store.focusedTerminalId !== terminalId) {
+            store.toggleSelectTerminal(store.focusedTerminalId);
+          }
+          store.toggleSelectTerminal(terminalId);
         } else {
           useTerminalStore.getState().clearSelection();
           onActivate();
@@ -138,7 +149,10 @@ const Tab: React.FC<TabProps> = ({
           onClick={(e) => e.stopPropagation()}
         />
       ) : (
-        <span className="tab-title">{title}</span>
+        <>
+          {isInGrid && viewMode === 'grid' && <span className="tab-split-dot" />}
+          <span className="tab-title">{title}</span>
+        </>
       )}
       <button className="close-btn" onClick={handleCloseClick} title="Close">
         &#10005;
@@ -206,7 +220,8 @@ const TabBar: React.FC<{ vertical?: boolean; side?: 'left' | 'right' }> = ({ ver
     (e: React.MouseEvent, terminalId: TerminalId) => {
       e.preventDefault();
       e.stopPropagation();
-      setContextMenu({ x: e.clientX, y: e.clientY, terminalId });
+      const sel = Object.keys(useTerminalStore.getState().selectedTerminalIds);
+      setContextMenu({ x: e.clientX, y: e.clientY, terminalId, selectedAtOpen: sel });
     },
     []
   );
@@ -240,6 +255,7 @@ const TabBar: React.FC<{ vertical?: boolean; side?: 'left' | 'right' }> = ({ ver
       {contextMenu && (
         <TabContextMenu
           position={contextMenu}
+          selectedAtOpen={contextMenu.selectedAtOpen || []}
           onClose={() => setContextMenu(null)}
         />
       )}

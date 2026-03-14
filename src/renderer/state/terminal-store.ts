@@ -329,6 +329,7 @@ interface TerminalStore {
   gridColumns: number; // 0 = auto (sqrt-based), 1..N = fixed column count
   preGridRoot: LayoutNode | null; // saved layout before entering grid mode
   selectedTerminalIds: Record<TerminalId, true>;
+  gridTabIds: Record<TerminalId, true>;
   fontSize: number;
   favoriteDirs: string[];
   recentDirs: string[];
@@ -437,7 +438,7 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
   showCommandPalette: false,
   showSettings: false,
   showDirPicker: false,
-  autoColorTabs: false,
+  autoColorTabs: true,
   showCopilotPanel: false,
   copilotSessions: [],
   claudeCodeSessions: [],
@@ -452,6 +453,7 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
   gridColumns: 0,
   preGridRoot: null as LayoutNode | null,
   selectedTerminalIds: {} as Record<TerminalId, true>,
+  gridTabIds: {} as Record<TerminalId, true>,
   fontSize: 14,
 
   // ── Actions ──────────────────────────────────────────────────────
@@ -1127,29 +1129,22 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
   },
 
   toggleViewMode: () => {
-    const { viewMode, layout, preGridRoot, gridColumns } = get();
+    const { viewMode, layout, preGridRoot } = get();
     if (viewMode === 'grid') {
-      // Grid → Focus: restore original tree
+      // Exit "Split Selected" → restore original layout in split mode
       const restored = preGridRoot || layout.tilingRoot;
       set({
-        viewMode: 'focus',
+        viewMode: 'split',
         layout: { ...layout, tilingRoot: restored },
         preGridRoot: null,
+        gridTabIds: {},
       });
+    } else if (viewMode === 'split') {
+      // Split → Focus
+      set({ viewMode: 'focus' });
     } else {
-      // Focus/Split → Grid: save current tree and build grid
-      const root = layout.tilingRoot;
-      if (!root) {
-        set({ viewMode: 'grid' });
-        return;
-      }
-      const ids = getLeafOrder(root);
-      const gridRoot = buildGridTree(ids, gridColumns || undefined);
-      set({
-        viewMode: 'grid',
-        preGridRoot: root,
-        layout: { ...layout, tilingRoot: gridRoot },
-      });
+      // Focus → Split
+      set({ viewMode: 'split' });
     }
   },
 
@@ -1175,10 +1170,13 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
     if (!gridRoot) return;
     // Save the original layout so we can restore when exiting grid
     const originalRoot = preGridRoot || layout.tilingRoot;
+    const gridIds: Record<string, true> = {};
+    for (const id of ids) gridIds[id] = true;
     set({
       viewMode: 'grid',
       preGridRoot: originalRoot,
       layout: { ...layout, tilingRoot: gridRoot },
+      gridTabIds: gridIds,
       selectedTerminalIds: {},
       focusedTerminalId: ids[0],
     });
@@ -1760,8 +1758,8 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
         const isAiProcess = isAiAgent(proc) || isAiAgent(titleLower);
         const normCwd = (p: string) => p.replace(/[\\/]+$/, '').replace(/\\/g, '/').toLowerCase();
         if (isAiProcess && normCwd(current.cwd) === normCwd(session.cwd)) {
-          // Link this terminal to the session
-          current = { ...current, aiSessionId: session.id, aiAutoTitle: true, customTitle: true };
+          // Link this terminal to the session; preserve existing custom title
+          current = { ...current, aiSessionId: session.id, aiAutoTitle: !current.customTitle, customTitle: true };
           newTerminals.set(id, current);
           alreadyLinked = true;
           matched = true;

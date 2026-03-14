@@ -132,6 +132,15 @@ body,
   white-space: nowrap;
 }
 
+.tab-split-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--focus-border);
+  flex-shrink: 0;
+  margin-right: 6px;
+}
+
 .tab-rename-input {
   width: 100%;
   max-width: 140px;

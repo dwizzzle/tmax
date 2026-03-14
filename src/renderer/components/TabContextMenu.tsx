@@ -10,10 +10,11 @@ export interface ContextMenuPosition {
 
 interface TabContextMenuProps {
   position: ContextMenuPosition;
+  selectedAtOpen: string[];
   onClose: () => void;
 }
 
-const TabContextMenu: React.FC<TabContextMenuProps> = ({ position, onClose }) => {
+const TabContextMenu: React.FC<TabContextMenuProps> = ({ position, selectedAtOpen, onClose }) => {
   const menuRef = useRef<HTMLDivElement>(null);
   const [renaming, setRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState('');
@@ -179,12 +180,12 @@ const TabContextMenu: React.FC<TabContextMenuProps> = ({ position, onClose }) =>
           }}>
             {store().viewMode === 'focus' ? 'Split Mode' : 'Focus Mode'} <span className="shortcut">Ctrl+Shift+F</span>
           </button>
-          {targetIds.length >= 2 && (
+          {selectedAtOpen.length >= 2 && (
             <button className="context-menu-item" onClick={() => {
-              store().gridSelectedTabs(targetIds);
+              store().gridSelectedTabs(selectedAtOpen);
               onClose();
             }}>
-              View Selected in Grid ({targetIds.length} tabs)
+              Split Selected ({selectedAtOpen.length} tabs)
             </button>
           )}
           <button className="context-menu-item" onClick={() => {
