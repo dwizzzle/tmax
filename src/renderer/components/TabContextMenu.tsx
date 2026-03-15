@@ -305,8 +305,8 @@ const TabContextMenu: React.FC<TabContextMenuProps> = ({ position, selectedAtOpe
             for (const [id] of store().terminals) {
               window.terminalAPI.resizePty(id, 80, 24).catch(() => {});
             }
-            // Send terminal reset sequence to the focused terminal to unstick input
-            window.terminalAPI.writePty(position.terminalId, '\x1b[?1h\x1b[?1l');
+            // Send focus-in report + terminal reset to unstick input (fixes DEC 1004 desync)
+            window.terminalAPI.writePty(position.terminalId, '\x1b[I\x1b[?1h\x1b[?1l');
             store().setFocus(position.terminalId);
             onClose();
           }}>

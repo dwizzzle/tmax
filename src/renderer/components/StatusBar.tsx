@@ -2,20 +2,91 @@ import React, { useEffect, useState } from 'react';
 import { useTerminalStore } from '../state/terminal-store';
 import { getLeafOrder } from '../state/terminal-store';
 
+interface UpdateInfoState {
+  status: string;
+  current: string;
+  latest?: string;
+  url?: string;
+  releaseNotes?: string;
+}
+
+function renderMarkdown(md: string): string {
+  return md
+    // Headings
+    .replace(/^### (.+)$/gm, '<h4>$1</h4>')
+    .replace(/^## (.+)$/gm, '<h3>$1</h3>')
+    // Bold
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    // Links: [text](url)
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, '<a href="$2" target="_blank">$1</a>')
+    // Bare URLs
+    .replace(/(^|[^"'])(https?:\/\/[^\s<]+)/g, '$1<a href="$2" target="_blank">$2</a>')
+    // Bullet lists
+    .replace(/^\* (.+)$/gm, '<li>$1</li>')
+    .replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>')
+    // Line breaks
+    .replace(/\n/g, '<br/>');
+}
+
+const UpdateModal: React.FC<{ info: UpdateInfoState; appVersion: string; onClose: () => void }> = ({ info, appVersion, onClose }) => {
+  return (
+    <div className="update-modal-overlay" onClick={onClose}>
+      <div className="update-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="update-modal-header">
+          <h2>Update Available</h2>
+          <button className="update-modal-close" onClick={onClose}>&times;</button>
+        </div>
+        <div className="update-modal-version">
+          v{appVersion} &rarr; v{info.latest}
+        </div>
+        {info.releaseNotes && (
+          <div className="update-modal-notes" dangerouslySetInnerHTML={{ __html: renderMarkdown(
+            // Deduplicate repeated lines (e.g. from force-pushed releases)
+            [...new Set(info.releaseNotes.split('\n'))].join('\n')
+          ) }} />
+        )}
+        <div className="update-modal-actions">
+          {info.status === 'downloaded' ? (
+            <button className="update-modal-btn primary" onClick={() => window.terminalAPI.restartAndUpdate()}>
+              Restart &amp; Update
+            </button>
+          ) : info.url ? (
+            <button className="update-modal-btn primary" onClick={() => window.open(info.url, '_blank')}>
+              Download
+            </button>
+          ) : null}
+          <button className="update-modal-btn" onClick={onClose}>Later</button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const StatusBar: React.FC = () => {
   const [appVersion, setAppVersion] = useState<string>('');
-  const [updateInfo, setUpdateInfo] = useState<{ current: string; latest: string; url: string } | null>(null);
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfoState | null>(null);
+  const [showUpdateModal, setShowUpdateModal] = useState(false);
+  const [shownVersion, setShownVersion] = useState<string>('');
 
   useEffect(() => {
     window.terminalAPI.getAppVersion().then(setAppVersion);
     window.terminalAPI.getVersionUpdate().then((info) => {
       if (info) setUpdateInfo(info);
     });
-    const cleanup = window.terminalAPI.onNewVersionAvailable((info) => {
+    const cleanup = window.terminalAPI.onUpdateStatusChanged((info) => {
       setUpdateInfo(info);
     });
     return cleanup;
   }, []);
+
+  // Auto-show modal when a new version is downloaded or available
+  useEffect(() => {
+    if (updateInfo && (updateInfo.status === 'downloaded' || updateInfo.status === 'available') && updateInfo.latest && updateInfo.latest !== shownVersion) {
+      setShownVersion(updateInfo.latest);
+      setShowUpdateModal(true);
+    }
+  }, [updateInfo?.status, updateInfo?.latest]);
+
   const terminals = useTerminalStore((s) => s.terminals);
   const focusedId = useTerminalStore((s) => s.focusedTerminalId);
   const layout = useTerminalStore((s) => s.layout);
@@ -31,84 +102,96 @@ const StatusBar: React.FC = () => {
   const floatingCount = layout.floatingPanels.length;
 
   return (
-    <div className="status-bar">
-      <div className="status-section status-left">
-        {focused ? (
-          <>
-            <span className="status-indicator" />
-            <span className="status-label">{focused.title}</span>
-            <span className="status-dim">
-              {focused.mode === 'floating' ? '(floating)' : ''}
+    <>
+      <div className="status-bar">
+        <div className="status-section status-left">
+          {focused ? (
+            <>
+              <span className="status-indicator" />
+              <span className="status-label">{focused.title}</span>
+              <span className="status-dim">
+                {focused.mode === 'floating' ? '(floating)' : ''}
+              </span>
+            </>
+          ) : (
+            <span className="status-dim">No terminal focused</span>
+          )}
+        </div>
+        <div className="status-section status-center">
+          {focused && (
+            <span
+              className="status-cwd"
+              onClick={() => {
+                if (focused.cwd) {
+                  window.terminalAPI.openPath(focused.cwd);
+                }
+              }}
+              title="Open folder"
+            >
+              &#128193; {focused.cwd}
             </span>
-          </>
-        ) : (
-          <span className="status-dim">No terminal focused</span>
-        )}
-      </div>
-      <div className="status-section status-center">
-        {focused && (
-          <span
-            className="status-cwd"
-            onClick={() => {
-              if (focused.cwd) {
-                window.terminalAPI.openPath(focused.cwd);
-              }
-            }}
-            title="Open folder"
-          >
-            &#128193; {focused.cwd}
-          </span>
-        )}
-      </div>
-      <div className="status-section status-right">
-        {Array.from(terminals.values()).some((t) => t.aiSessionId || t.startupCommand) && (
+          )}
+        </div>
+        <div className="status-section status-right">
+          {Array.from(terminals.values()).some((t) => t.aiSessionId || t.startupCommand) && (
+            <button
+              className="status-mode-btn"
+              onClick={() => useTerminalStore.getState().resumeAllSessions()}
+              title="Resume all AI sessions"
+            >
+              [&#9654; Resume Sessions]
+            </button>
+          )}
           <button
             className="status-mode-btn"
-            onClick={() => useTerminalStore.getState().resumeAllSessions()}
-            title="Resume all AI sessions"
+            onClick={() => useTerminalStore.getState().colorizeAllTabs()}
+            title="Toggle tab colors (Ctrl+Shift+O)"
           >
-            [▶ Resume Sessions]
+            [{hasAnyColor ? 'Colors \u2713' : 'Colors'} Ctrl+Shift+O]
           </button>
-        )}
-        <button
-          className="status-mode-btn"
-          onClick={() => useTerminalStore.getState().colorizeAllTabs()}
-          title="Toggle tab colors (Ctrl+Shift+O)"
-        >
-          [{hasAnyColor ? 'Colors ✓' : 'Colors'} Ctrl+Shift+O]
-        </button>
-        <button
-          className="status-mode-btn"
-          onClick={() => useTerminalStore.getState().toggleViewMode()}
-          title="Toggle view mode (Ctrl+Shift+F)"
-        >
-          [{viewMode === 'focus' ? 'Focus' : viewMode === 'grid' ? (gridColumns ? `Grid ${gridColumns}col` : 'Grid') : 'Split'} Ctrl+Shift+F]
-        </button>
-        <span className="status-dim">
-          {totalCount} terminal{totalCount !== 1 ? 's' : ''}
-          {floatingCount > 0 ? ` (${tiledCount} tiled, ${floatingCount} floating)` : ''}
-        </span>
-        <span className="status-dim">{Math.round((fontSize / (config?.terminal?.fontSize ?? 14)) * 100)}%</span>
-        {updateInfo ? (
-          <span
-            className="status-update-available"
-            onClick={() => window.open(updateInfo.url, '_blank')}
-            title={`Update available: v${updateInfo.latest} (click to download)`}
+          <button
+            className="status-mode-btn"
+            onClick={() => useTerminalStore.getState().toggleViewMode()}
+            title="Toggle view mode (Ctrl+Shift+F)"
           >
-            v{appVersion} → v{updateInfo.latest}
+            [{viewMode === 'focus' ? 'Focus' : viewMode === 'grid' ? (gridColumns ? `Grid ${gridColumns}col` : 'Grid') : 'Split'} Ctrl+Shift+F]
+          </button>
+          <span className="status-dim">
+            {totalCount} terminal{totalCount !== 1 ? 's' : ''}
+            {floatingCount > 0 ? ` (${tiledCount} tiled, ${floatingCount} floating)` : ''}
           </span>
-        ) : (
-          <span className="status-dim">v{appVersion}</span>
-        )}
-        <button
-          className="status-help-btn"
-          onClick={() => useTerminalStore.getState().toggleCommandPalette()}
-          title="Show command palette (Ctrl+Shift+P)"
-        >
-          &#9776;
-        </button>
+          <span className="status-dim">{Math.round((fontSize / (config?.terminal?.fontSize ?? 14)) * 100)}%</span>
+          {updateInfo && updateInfo.status === 'downloading' ? (
+            <span
+              className="status-update-downloading"
+              title={`Downloading update${updateInfo.latest ? ` v${updateInfo.latest}` : ''}...`}
+            >
+              &#10227; Updating{updateInfo.latest ? ` to v${updateInfo.latest}` : ''}
+            </span>
+          ) : updateInfo && (updateInfo.status === 'downloaded' || updateInfo.status === 'available') ? (
+            <span
+              className={updateInfo.status === 'downloaded' ? 'status-update-ready' : 'status-update-available'}
+              onClick={() => setShowUpdateModal(true)}
+              title={`Update ${updateInfo.status === 'downloaded' ? 'ready' : 'available'}: v${updateInfo.latest} (click for details)`}
+            >
+              v{appVersion} &rarr; v{updateInfo.latest}
+            </span>
+          ) : (
+            <span className="status-dim">v{appVersion}</span>
+          )}
+          <button
+            className="status-help-btn"
+            onClick={() => useTerminalStore.getState().toggleCommandPalette()}
+            title="Show command palette (Ctrl+Shift+P)"
+          >
+            &#9776;
+          </button>
+        </div>
       </div>
-    </div>
+      {showUpdateModal && updateInfo && (
+        <UpdateModal info={updateInfo} appVersion={appVersion} onClose={() => setShowUpdateModal(false)} />
+      )}
+    </>
   );
 };
 

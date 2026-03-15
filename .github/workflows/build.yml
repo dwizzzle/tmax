@@ -95,6 +95,7 @@ jobs:
             out/make/**/*.deb
             out/make/**/*.rpm
             out/make/**/*.nupkg
+            out/make/**/RELEASES
             out/*.zip
           if-no-files-found: warn
 
@@ -137,6 +138,8 @@ jobs:
             artifacts/**/*.dmg
             artifacts/**/*.deb
             artifacts/**/*.rpm
+            artifacts/**/*.nupkg
+            artifacts/**/RELEASES
           draft: false
           prerelease: false
           generate_release_notes: true

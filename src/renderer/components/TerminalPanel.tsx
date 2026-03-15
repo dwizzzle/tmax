@@ -23,6 +23,10 @@ const TerminalPanel: React.FC<TerminalPanelProps> = ({ terminalId }) => {
   const config = useTerminalStore((s) => s.config);
   const focusedTerminalId = useTerminalStore((s) => s.focusedTerminalId);
   const fontSize = useTerminalStore((s) => s.fontSize);
+  // Track overlay state to re-focus xterm when overlays close
+  const anyOverlayOpen = useTerminalStore((s) =>
+    s.showCommandPalette || s.showSettings || s.showSwitcher || s.showShortcuts || s.showCopilotPanel || s.showDirPicker
+  );
   const aiResumeCommandRef = useRef<string>('');
   const aiSessionStartedRef = useRef(false);
   const isFocused = focusedTerminalId === terminalId;
@@ -266,15 +270,19 @@ const TerminalPanel: React.FC<TerminalPanelProps> = ({ terminalId }) => {
       textareaEl.addEventListener('focus', handleFocus);
     }
 
-    // ResizeObserver for fit
+    // ResizeObserver for fit — debounced to avoid rapid resize races
+    let resizeTimer: ReturnType<typeof setTimeout> | null = null;
     const resizeObserver = new ResizeObserver(() => {
-      try {
-        fitAddon.fit();
-        const { cols, rows } = term;
-        window.terminalAPI.resizePty(terminalId, cols, rows);
-      } catch {
-        // Ignore resize errors during teardown
-      }
+      if (resizeTimer) clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => {
+        try {
+          fitAddon.fit();
+          const { cols, rows } = term;
+          window.terminalAPI.resizePty(terminalId, cols, rows);
+        } catch {
+          // Ignore resize errors during teardown
+        }
+      }, 100);
     });
     resizeObserver.observe(containerRef.current);
 
@@ -346,14 +354,15 @@ const TerminalPanel: React.FC<TerminalPanelProps> = ({ terminalId }) => {
     } catch { /* terminal may be disposed */ }
   }, [fontSize, terminalId]);
 
-  // Programmatic focus when this terminal becomes focused in the store
+  // Programmatic focus when this terminal becomes focused in the store,
+  // or when overlays close (to restore DEC focus reporting for Copilot CLI)
   useEffect(() => {
     try {
-      if (isFocused && terminalRef.current) {
+      if (isFocused && !anyOverlayOpen && terminalRef.current) {
         terminalRef.current.focus();
       }
     } catch { /* terminal may be disposed */ }
-  }, [isFocused]);
+  }, [isFocused, anyOverlayOpen]);
 
   // Re-focus xterm when the OS window regains focus (alt-tab back)
   useEffect(() => {
