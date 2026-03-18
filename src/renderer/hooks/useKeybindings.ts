@@ -11,7 +11,7 @@ interface KeyCombo {
 
 function parseKeyCombo(combo: string): KeyCombo {
   // Handle special cases: "Ctrl+=" ends with "+" then "=" which splits oddly
-  // Also "Ctrl+-" and "Ctrl+Shift+/" need care
+  // Also "Ctrl+-" and "Ctrl+Shift+?" need care
   const ctrlKey = /\bctrl\b/i.test(combo);
   const shiftKey = /\bshift\b/i.test(combo);
   const altKey = /\balt\b/i.test(combo);
@@ -57,7 +57,7 @@ const DEFAULT_BINDINGS: Record<string, string> = {
   'Ctrl+Shift+E': 'equalizeLayout',
   'Ctrl+,': 'openSettings',
   'Ctrl+Shift+R': 'renameTerminal',
-  'Ctrl+Shift+/': 'showShortcuts',
+  'Ctrl+Shift+?': 'showShortcuts',
   'Ctrl+Shift+G': 'switchTerminal',
   'Ctrl+Shift+D': 'dirPicker',
   'Ctrl+Shift+P': 'commandPalette',
