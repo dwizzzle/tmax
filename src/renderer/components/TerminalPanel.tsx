@@ -239,14 +239,28 @@ const TerminalPanel: React.FC<TerminalPanelProps> = ({ terminalId }) => {
       window.terminalAPI.writePty(terminalId, data);
     });
 
-    // Receive data from PTY
+    // Receive data from PTY — batch writes via rAF to avoid saturating the
+    // renderer event loop during output bursts (e.g. after system resume).
+    let pendingData = '';
+    let rafScheduled = false;
+    const flushPendingData = () => {
+      rafScheduled = false;
+      if (pendingData) {
+        term.write(pendingData);
+        pendingData = '';
+      }
+    };
     const unsubscribePtyData = window.terminalAPI.onPtyData(
       (id: string, data: string) => {
         if (id === terminalId) {
           diagRef.current.outputEventCount++;
           diagRef.current.lastOutputTime = Date.now();
           diagRef.current.outputBytes += data.length;
-          term.write(data);
+          pendingData += data;
+          if (!rafScheduled) {
+            rafScheduled = true;
+            requestAnimationFrame(flushPendingData);
+          }
           // Parse cwd from PowerShell prompt "PS C:\path>" or cmd prompt "C:\path>"
           // Strip ANSI escape sequences first to avoid capturing colored output as paths
           const clean = data.replace(/\x1b\[[0-9;]*[A-Za-z]/g, '');
