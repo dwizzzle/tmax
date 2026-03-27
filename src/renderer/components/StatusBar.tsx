@@ -117,16 +117,16 @@ const StatusBar: React.FC = () => {
           <button
             className="status-mode-btn"
             onClick={() => useTerminalStore.getState().toggleDirPicker()}
-            title="Directories"
+            title="Directories (Ctrl+Shift+D)"
           >
-            &#128193;
+            &#128193; Dirs
           </button>
           <button
             className="status-mode-btn"
             onClick={() => useTerminalStore.getState().toggleCopilotPanel()}
-            title="AI Sessions"
+            title="AI Sessions (Ctrl+Shift+C)"
           >
-            &#129302;
+            &#129302; Sessions
           </button>
           {focused ? (
             <>
