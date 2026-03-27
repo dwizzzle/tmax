@@ -49,14 +49,13 @@
 <div class="subtitle"><a href="https://github.com/InbarR/tmax">github.com/InbarR/tmax</a></div>
 
 <div class="summary">
-  <div class="stat-card"><div class="label">Total Downloads</div><div class="value green" id="total">-</div></div>
+  <div class="stat-card"><div class="label">Total Users (installs)</div><div class="value green" id="total">-</div></div>
   <div class="stat-card"><div class="label">Auto-Updates</div><div class="value" id="updates">-</div></div>
-  <div class="stat-card"><div class="label">Manual Installs</div><div class="value" id="manual">-</div></div>
   <div class="stat-card"><div class="label">Releases</div><div class="value" id="releases">-</div></div>
 </div>
 
 <div class="chart-section">
-  <div class="chart-title">Downloads by version (stacked by OS)</div>
+  <div class="chart-title">New installs by version (stacked by OS)</div>
   <div class="chart-container"><canvas id="chart"></canvas></div>
 </div>
 
@@ -71,8 +70,10 @@
 
 <script>
 const REPO = 'InbarR/tmax';
-// Assets to exclude from real download counts (auto-update manifest, not actual downloads)
+// Assets to exclude from download counts
 const EXCLUDED = new Set(['RELEASES']);
+// Auto-update assets (not new users)
+const IS_UPDATE = (name) => /\.nupkg$/.test(name);
 
 function platformOf(name) {
   if (/win32|\.exe$|\.nupkg$|RELEASES/i.test(name)) return 'windows';
@@ -107,12 +108,12 @@ function renderChart(releases) {
   ctx.scale(dpr, dpr);
   const W = rect.width, H = rect.height;
 
-  // Build data: one bar per version, stacked by OS
+  // Build data: one bar per version, stacked by OS (new installs only, no .nupkg updates)
   const sorted = [...releases].filter(r => r.assets.length > 0).reverse(); // oldest first
   const data = sorted.map(r => {
     const byOS = { windows: 0, macos: 0, linux: 0 };
     for (const a of r.assets) {
-      if (EXCLUDED.has(a.name)) continue;
+      if (EXCLUDED.has(a.name) || IS_UPDATE(a.name)) continue;
       const p = platformOf(a.name);
       if (p in byOS) byOS[p] += a.download_count;
     }
@@ -226,19 +227,17 @@ async function load() {
   const releases = await resp.json();
   allData = releases;
 
-  let totalAll = 0, totalUpdates = 0, totalManual = 0;
+  let totalUsers = 0, totalUpdates = 0;
   for (const r of releases) {
     for (const a of r.assets) {
       if (EXCLUDED.has(a.name)) continue;
-      totalAll += a.download_count;
-      if (/\.nupkg$/.test(a.name)) totalUpdates += a.download_count;
-      else totalManual += a.download_count;
+      if (IS_UPDATE(a.name)) totalUpdates += a.download_count;
+      else totalUsers += a.download_count;
     }
   }
 
-  document.getElementById('total').textContent = totalAll.toLocaleString();
+  document.getElementById('total').textContent = totalUsers.toLocaleString();
   document.getElementById('updates').textContent = totalUpdates.toLocaleString();
-  document.getElementById('manual').textContent = totalManual.toLocaleString();
   document.getElementById('releases').textContent = releases.length;
 
   renderChart(releases);
