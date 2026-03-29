@@ -85,7 +85,16 @@ interface FileTreeProps {
 
 const FileTree: React.FC<FileTreeProps> = ({ files, selectedFile, onSelectFile }) => {
   const [collapsedDirs, setCollapsedDirs] = useState<Set<string>>(new Set());
-  const grouped = useMemo(() => groupFilesByDir(files), [files]);
+  const [filter, setFilter] = useState('');
+  const filterRef = useRef<HTMLInputElement>(null);
+
+  const filteredFiles = useMemo(() => {
+    if (!filter) return files;
+    const q = filter.toLowerCase();
+    return files.filter(f => f.path.toLowerCase().includes(q) || fileName(f.path).toLowerCase().includes(q));
+  }, [files, filter]);
+
+  const grouped = useMemo(() => groupFilesByDir(filteredFiles), [filteredFiles]);
 
   const toggleDir = (dir: string) => {
     setCollapsedDirs(prev => {
@@ -98,7 +107,20 @@ const FileTree: React.FC<FileTreeProps> = ({ files, selectedFile, onSelectFile }
 
   return (
     <div className="diff-file-tree">
-      <div className="diff-file-tree-header">Changes</div>
+      <div className="diff-file-tree-header">Changes ({filteredFiles.length}/{files.length})</div>
+      <div className="diff-file-tree-search">
+        <input
+          ref={filterRef}
+          type="text"
+          value={filter}
+          onChange={e => setFilter(e.target.value)}
+          placeholder="Filter files..."
+          onKeyDown={e => {
+            if (e.key === 'Escape') { setFilter(''); e.stopPropagation(); }
+          }}
+        />
+        {filter && <button className="diff-filter-clear" onClick={() => { setFilter(''); filterRef.current?.focus(); }}>&#10005;</button>}
+      </div>
       {Array.from(grouped.entries()).map(([dir, dirFiles]) => (
         <div key={dir} className="diff-dir-group">
           <div className="diff-dir-header" onClick={() => toggleDir(dir)}>

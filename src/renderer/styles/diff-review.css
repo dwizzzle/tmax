@@ -158,6 +158,45 @@
   letter-spacing: 0.5px;
 }
 
+.diff-file-tree-search {
+  position: relative;
+  padding: 0 8px 8px;
+}
+
+.diff-file-tree-search input {
+  width: 100%;
+  padding: 5px 24px 5px 8px;
+  font-size: 12px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-primary);
+  outline: none;
+}
+
+.diff-file-tree-search input:focus {
+  border-color: var(--accent-color, #89b4fa);
+}
+
+.diff-file-tree-search input::placeholder {
+  color: var(--text-secondary);
+  opacity: 0.6;
+}
+
+.diff-filter-clear {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-calc(50% + 4px));
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 11px;
+  padding: 2px 4px;
+  line-height: 1;
+}
+
 .diff-dir-group {
   margin-bottom: 2px;
 }
