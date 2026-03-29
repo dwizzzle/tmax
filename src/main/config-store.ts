@@ -68,26 +68,6 @@ function findPwsh(): string | null {
   return null;
 }
 
-function detectWslDistros(): ShellProfile[] {
-  if (process.platform !== 'win32') return [];
-  try {
-    const { execSync } = require('child_process');
-    // wsl -l -q outputs distro names, one per line (UTF-16LE encoded)
-    const raw = execSync('wsl -l -q', { encoding: 'utf16le', timeout: 3000 }).toString();
-    const distros = raw.split(/\r?\n/).map((s: string) => s.replace(/\0/g, '').trim()).filter(Boolean);
-    if (distros.length === 0) return [{ id: 'wsl', name: 'WSL', path: 'wsl.exe', args: [] }];
-    return distros.map((name: string) => ({
-      id: `wsl-${name.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
-      name: `WSL: ${name}`,
-      path: 'wsl.exe',
-      args: ['-d', name],
-    }));
-  } catch {
-    // WSL not installed or not available
-    return [{ id: 'wsl', name: 'WSL', path: 'wsl.exe', args: [] }];
-  }
-}
-
 function getDefaultShells(): { shells: ShellProfile[]; defaultShellId: string } {
   if (process.platform === 'win32') {
     const pwshPath = findPwsh();
@@ -98,7 +78,7 @@ function getDefaultShells(): { shells: ShellProfile[]; defaultShellId: string } 
     shells.push(
       { id: 'powershell', name: 'Windows PowerShell', path: 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe', args: [] },
       { id: 'cmd', name: 'CMD', path: 'cmd.exe', args: [] },
-      ...detectWslDistros(),
+      { id: 'wsl', name: 'WSL', path: 'wsl.exe', args: [] },
     );
     return {
       shells,

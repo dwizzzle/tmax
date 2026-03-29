@@ -192,19 +192,17 @@ function setupConfigStore(): void {
 function registerIpcHandlers(): void {
   ipcMain.handle(
     IPC.PTY_CREATE,
-    (_event, opts: { id: string; shellPath: string; shellProfileId?: string; args: string[]; cwd: string; env?: Record<string, string>; cols: number; rows: number }) => {
-      // Validate shell against configured profiles to prevent arbitrary exec
+    (_event, opts: { id: string; shellPath: string; args: string[]; cwd: string; env?: Record<string, string>; cols: number; rows: number }) => {
+      // Validate shell path against configured profiles to prevent arbitrary exec
       const shells = configStore!.get('shells');
-      const profile = opts.shellProfileId
-        ? shells.find((s: { id: string }) => s.id === opts.shellProfileId)
-        : shells.find((s: { path: string }) => s.path === opts.shellPath);
+      const profile = shells.find((s: { path: string }) => s.path === opts.shellPath);
       if (!profile) {
-        throw new Error(`Shell not in configured profiles: ${opts.shellProfileId || opts.shellPath}`);
+        throw new Error(`Shell path not in configured profiles: ${opts.shellPath}`);
       }
       // Clamp cols/rows to reasonable bounds
       const cols = Math.max(1, Math.min(500, opts.cols || 80));
       const rows = Math.max(1, Math.min(200, opts.rows || 24));
-      return ptyManager!.create({ ...opts, shellPath: profile.path, args: profile.args, cols, rows });
+      return ptyManager!.create({ ...opts, args: profile.args, cols, rows });
     }
   );
 
@@ -503,119 +501,6 @@ function setupClaudeCodeMonitor(): void {
   });
 }
 
-function getWslDistros(): string[] {
-  if (process.platform !== 'win32') return [];
-  try {
-    const { execSync } = require('child_process');
-    const raw = execSync('wsl -l -q', { encoding: 'utf16le', timeout: 3000 }).toString();
-    return raw.split(/\r?\n/).map((s: string) => s.replace(/\0/g, '').trim()).filter(Boolean);
-  } catch {
-    return [];
-  }
-}
-
-function wslExec(distro: string, cmd: string): string | null {
-  try {
-    const { execSync } = require('child_process');
-    return execSync(`wsl -d ${distro} -e sh -c "${cmd}"`, { encoding: 'utf8', timeout: 5000 }).trim();
-  } catch {
-    return null;
-  }
-}
-
-function wslReadFile(distro: string, filePath: string): string | null {
-  return wslExec(distro, `cat '${filePath}' 2>/dev/null`);
-}
-
-let wslPollTimer: ReturnType<typeof setInterval> | null = null;
-
-function setupWslSessionWatchers(): void {
-  const distros = getWslDistros();
-  if (distros.length === 0) return;
-
-  // Poll WSL sessions every 10 seconds (can't use file watchers on WSL paths)
-  wslPollTimer = setInterval(() => {
-    for (const distro of distros) {
-      pollWslCopilotSessions(distro);
-      pollWslClaudeCodeSessions(distro);
-    }
-  }, 10000);
-
-  // Initial scan
-  for (const distro of distros) {
-    pollWslCopilotSessions(distro);
-    pollWslClaudeCodeSessions(distro);
-  }
-  diagLog('wsl:poll-started', { distros });
-}
-
-function pollWslCopilotSessions(distro: string): void {
-  if (!copilotMonitor) return;
-  const home = wslExec(distro, 'echo $HOME');
-  if (!home) return;
-  const basePath = `${home}/.copilot/session-state`;
-  const listing = wslExec(distro, `ls '${basePath}' 2>/dev/null`);
-  if (!listing) return;
-
-  const sessionIds = listing.split(/\r?\n/).filter(Boolean);
-  for (const sessionId of sessionIds) {
-    if (copilotMonitor.getSession(sessionId)) continue; // already known
-    const eventsPath = `${basePath}/${sessionId}/events.jsonl`;
-    const content = wslReadFile(distro, eventsPath);
-    if (!content) continue;
-
-    // Write to a temp file so the monitor can parse it with existing logic
-    const tmpDir = path.join(os.tmpdir(), 'tmax-wsl-sessions', 'copilot', sessionId);
-    fs.mkdirSync(tmpDir, { recursive: true });
-    const tmpEvents = path.join(tmpDir, 'events.jsonl');
-    fs.writeFileSync(tmpEvents, content);
-
-    // Also copy workspace.yaml if it exists
-    const wsContent = wslReadFile(distro, `${basePath}/${sessionId}/workspace.yaml`);
-    if (wsContent) fs.writeFileSync(path.join(tmpDir, 'workspace.yaml'), wsContent);
-
-    const tmpBase = path.join(os.tmpdir(), 'tmax-wsl-sessions', 'copilot');
-    copilotMonitor.addExtraBasePath(tmpBase);
-    copilotMonitor.handleNewSession(sessionId, tmpBase);
-    diagLog('wsl:copilot-session', { distro, sessionId });
-  }
-}
-
-function pollWslClaudeCodeSessions(distro: string): void {
-  if (!claudeCodeMonitor) return;
-  const home = wslExec(distro, 'echo $HOME');
-  if (!home) return;
-  const basePath = `${home}/.claude/projects`;
-  const projects = wslExec(distro, `ls '${basePath}' 2>/dev/null`);
-  if (!projects) return;
-
-  for (const projName of projects.split(/\r?\n/).filter(Boolean)) {
-    const projDir = `${basePath}/${projName}`;
-    const files = wslExec(distro, `ls '${projDir}'/*.jsonl 2>/dev/null`);
-    if (!files) continue;
-
-    for (const filePath of files.split(/\r?\n/).filter(Boolean)) {
-      const fileName = path.basename(filePath);
-      const tmpDir = path.join(os.tmpdir(), 'tmax-wsl-sessions', 'claude', projName);
-      const tmpFile = path.join(tmpDir, fileName);
-
-      // Skip if already known
-      if (fs.existsSync(tmpFile)) continue;
-
-      const content = wslReadFile(distro, filePath);
-      if (!content) continue;
-
-      fs.mkdirSync(tmpDir, { recursive: true });
-      fs.writeFileSync(tmpFile, content);
-
-      const tmpBase = path.join(os.tmpdir(), 'tmax-wsl-sessions', 'claude');
-      claudeCodeMonitor.addExtraBasePath(tmpBase);
-      claudeCodeMonitor.handleNewFile(tmpFile);
-      diagLog('wsl:claude-session', { distro, file: filePath });
-    }
-  }
-}
-
 process.on('uncaughtException', (error) => {
   console.error('Uncaught exception in main process:', error);
 });
@@ -632,8 +517,6 @@ app.whenReady().then(() => {
     console.log('Copilot monitor ready');
     setupClaudeCodeMonitor();
     console.log('Claude Code monitor ready');
-    setupWslSessionWatchers();
-    console.log('WSL session watchers ready');
     createWindow();
     console.log('Window created');
     registerIpcHandlers();
@@ -669,7 +552,6 @@ app.on('window-all-closed', async () => {
   copilotMonitor?.dispose();
   await claudeCodeWatcher?.stop();
   claudeCodeMonitor?.dispose();
-  if (wslPollTimer) clearInterval(wslPollTimer);
   versionChecker?.stop();
   clearNotificationCooldowns();
   app.quit();

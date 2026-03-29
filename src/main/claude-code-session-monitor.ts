@@ -24,14 +24,9 @@ export class ClaudeCodeSessionMonitor {
   private filePaths = new Map<string, string>();
   private callbacks: ClaudeCodeMonitorCallbacks = {};
   private readonly basePath: string;
-  private extraBasePaths: string[] = [];
 
   constructor() {
     this.basePath = path.join(os.homedir(), '.claude', 'projects');
-  }
-
-  addExtraBasePath(p: string): void {
-    if (!this.extraBasePaths.includes(p)) this.extraBasePaths.push(p);
   }
 
   setCallbacks(callbacks: ClaudeCodeMonitorCallbacks): void {
@@ -46,26 +41,24 @@ export class ClaudeCodeSessionMonitor {
 
   scanSessions(): CopilotSessionSummary[] {
     const summaries: CopilotSessionSummary[] = [];
-    const allBasePaths = [this.basePath, ...this.extraBasePaths];
+
+    if (!fs.existsSync(this.basePath)) return summaries;
+
+    let projectDirs: fs.Dirent[];
+    try {
+      projectDirs = fs.readdirSync(this.basePath, { withFileTypes: true });
+    } catch {
+      return summaries;
+    }
 
     const currentIds = new Set<string>();
     const maxAgeMs = 7 * 24 * 60 * 60 * 1000; // 7 days
     const cutoff = Date.now() - maxAgeMs;
 
-    for (const base of allBasePaths) {
-      if (!fs.existsSync(base)) continue;
-
-      let projectDirs: fs.Dirent[];
-      try {
-        projectDirs = fs.readdirSync(base, { withFileTypes: true });
-      } catch {
-        continue;
-      }
-
     for (const projEntry of projectDirs) {
       if (!projEntry.isDirectory()) continue;
 
-      const projDir = path.join(base, projEntry.name);
+      const projDir = path.join(this.basePath, projEntry.name);
 
       let files: fs.Dirent[];
       try {
@@ -102,7 +95,6 @@ export class ClaudeCodeSessionMonitor {
         }
       }
     }
-    } // end allBasePaths loop
 
     // Detect removed sessions
     for (const [id, fp] of this.filePaths) {
