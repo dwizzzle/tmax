@@ -186,8 +186,7 @@
 .diff-filter-clear {
   position: absolute;
   right: 12px;
-  top: 50%;
-  transform: translateY(-calc(50% + 4px));
+  top: 4px;
   background: none;
   border: none;
   color: var(--text-secondary);
