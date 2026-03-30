@@ -30,7 +30,12 @@ const shortcuts = [
     { key: 'Ctrl+ - / Ctrl+Scroll Down', action: 'Zoom out' },
     { key: 'Ctrl+0', action: 'Reset zoom' },
   ]},
+  { category: 'AI', items: [
+    { key: 'Ctrl+Shift+I', action: 'Jump to prompt in terminal' },
+    { key: 'Ctrl+Shift+C', action: 'AI Sessions panel' },
+  ]},
   { category: 'Other', items: [
+    { key: 'Ctrl+Shift+B', action: 'Hide / show tab bar' },
     { key: 'Ctrl+Shift+?', action: 'Show this help' },
     { key: 'Double-click tab', action: 'Rename terminal' },
     { key: 'Right-click tab', action: 'Context menu' },

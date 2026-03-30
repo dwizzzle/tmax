@@ -4,6 +4,7 @@ import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { SearchAddon } from '@xterm/addon-search';
 import { useTerminalStore } from '../state/terminal-store';
+import { registerTerminal, unregisterTerminal } from '../terminal-registry';
 import '@xterm/xterm/css/xterm.css';
 
 function ago(ts: number): string {
@@ -157,6 +158,7 @@ const TerminalPanel: React.FC<TerminalPanelProps> = ({ terminalId }) => {
     term.loadAddon(searchAddon);
 
     searchAddonRef.current = searchAddon;
+    registerTerminal(terminalId, term, searchAddon);
 
     searchAddon.onDidChangeResults((e) => {
       if (e) {
@@ -331,10 +333,12 @@ const TerminalPanel: React.FC<TerminalPanelProps> = ({ terminalId }) => {
 
     // Handle PTY exit — auto-close after brief delay
     const unsubscribePtyExit = window.terminalAPI.onPtyExit(
-      (id: string, _exitCode: number | undefined) => {
+      (id: string, exitCode: number | undefined) => {
         if (id === terminalId) {
+          window.terminalAPI.diagLog('renderer:pty-exit-received', { terminalId, exitCode });
           term.write('\r\n\x1b[90m[Process exited]\x1b[0m\r\n');
           setTimeout(() => {
+            window.terminalAPI.diagLog('renderer:close-terminal-start', { terminalId });
             useTerminalStore.getState().closeTerminal(terminalId);
           }, 500);
         }
@@ -494,6 +498,7 @@ const TerminalPanel: React.FC<TerminalPanelProps> = ({ terminalId }) => {
       containerEl.removeEventListener('wheel', handleWheel);
       containerEl.removeEventListener('contextmenu', handleContextMenu, true);
       titleDisposable.dispose();
+      unregisterTerminal(terminalId);
       term.dispose();
       terminalRef.current = null;
       fitAddonRef.current = null;

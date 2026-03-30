@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
+import ReactDOM from 'react-dom';
 import { useTerminalStore, TAB_COLORS } from '../state/terminal-store';
 import type { TerminalId } from '../state/types';
 
@@ -53,16 +54,17 @@ const TabContextMenu: React.FC<TabContextMenuProps> = ({ position, selectedAtOpe
   useEffect(() => {
     if (!menuRef.current) return;
     const rect = menuRef.current.getBoundingClientRect();
+    const pad = 4;
     let { x, y } = position;
-    if (rect.bottom > window.innerHeight) {
-      y = position.y - rect.height;
+    // Keep right edge within viewport
+    if (x + rect.width > window.innerWidth - pad) {
+      x = Math.max(pad, window.innerWidth - rect.width - pad);
     }
-    if (rect.right > window.innerWidth) {
-      x = position.x - rect.width;
+    // Keep bottom edge within viewport
+    if (y + rect.height > window.innerHeight - pad) {
+      y = Math.max(pad, window.innerHeight - rect.height - pad);
     }
-    if (x !== adjustedPos.x || y !== adjustedPos.y) {
-      setAdjustedPos({ x, y });
-    }
+    setAdjustedPos({ x, y });
   }, [position]);
 
   // Focus input when renaming
@@ -143,7 +145,7 @@ const TabContextMenu: React.FC<TabContextMenuProps> = ({ position, selectedAtOpe
     onClose();
   }, [position.terminalId, isDormant, onClose]);
 
-  return (
+  return ReactDOM.createPortal(
     <div
       ref={menuRef}
       className="context-menu"
@@ -290,6 +292,12 @@ const TabContextMenu: React.FC<TabContextMenuProps> = ({ position, selectedAtOpe
             </>
           )}
           <div className="context-menu-separator" />
+          <button className="context-menu-item" onClick={() => {
+            store().toggleHideTabTitles();
+            onClose();
+          }}>
+            Hide Tab Bar <span className="context-menu-shortcut">Ctrl+Shift+B</span>
+          </button>
           <div className="context-menu-label">Tab Bar Position</div>
           {(['top', 'bottom', 'left', 'right'] as const).map((pos) => (
             <button key={pos} className={`context-menu-item sub${store().tabBarPosition === pos ? ' active-check' : ''}`} onClick={() => {
@@ -382,7 +390,8 @@ const TabContextMenu: React.FC<TabContextMenuProps> = ({ position, selectedAtOpe
           </button>
         </>
       )}
-    </div>
+    </div>,
+    document.body,
   );
 };
 

@@ -326,6 +326,7 @@ interface TerminalStore {
   showCommandPalette: boolean;
   showSettings: boolean;
   tabBarPosition: 'top' | 'bottom' | 'left' | 'right';
+  hideTabTitles: boolean;
   renamingTerminalId: TerminalId | null;
   viewMode: 'split' | 'focus' | 'grid';
   gridColumns: number; // 0 = auto (sqrt-based), 1..N = fixed column count
@@ -343,6 +344,8 @@ interface TerminalStore {
   claudeCodeSessions: CopilotSessionSummary[];
   copilotSearchQuery: string;
   selectedCopilotSessionId: string | null;
+  // Prompts dialog state
+  promptsDialogRequest: { terminalId: TerminalId } | null;
   // Diff review state
   diffReviewOpen: boolean;
   diffReviewTerminalId: TerminalId | null;
@@ -384,6 +387,7 @@ interface TerminalStore {
   toggleSettings: () => void;
   updateConfig: (update: Partial<AppConfig>) => Promise<void>;
   toggleTabBarPosition: () => void;
+  toggleHideTabTitles: () => void;
   startRenaming: (id: TerminalId | null) => void;
   toggleViewMode: () => void;
   toggleSelectTerminal: (id: TerminalId) => void;
@@ -425,6 +429,9 @@ interface TerminalStore {
   updateClaudeCodeSession: (session: CopilotSessionSummary) => void;
   removeClaudeCodeSession: (sessionId: string) => void;
   resumeAllSessions: () => void;
+  // Prompts dialog action
+  showPromptsForTerminal: (terminalId: TerminalId) => void;
+  clearPromptsDialogRequest: () => void;
   // Diff review actions
   openDiffReview: (terminalId: TerminalId) => void;
   closeDiffReview: () => void;
@@ -453,6 +460,7 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
   showDirPicker: false,
   autoColorTabs: true,
   showCopilotPanel: false,
+  promptsDialogRequest: null,
   copilotSessions: [],
   claudeCodeSessions: [],
   copilotSearchQuery: '',
@@ -464,6 +472,7 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
   favoriteDirs: [],
   recentDirs: [],
   tabBarPosition: 'top' as 'top' | 'bottom' | 'left' | 'right',
+  hideTabTitles: false,
   renamingTerminalId: null,
   viewMode: 'grid' as 'split' | 'focus' | 'grid',
   gridColumns: 0,
@@ -479,6 +488,7 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
     if (config?.theme) applyThemeToChromeVars(config.theme);
     const updates: Record<string, unknown> = { config };
     if (config?.tabBarPosition) updates.tabBarPosition = config.tabBarPosition;
+    if (typeof (config as any)?.hideTabTitles === 'boolean') updates.hideTabTitles = (config as any).hideTabTitles;
     set(updates);
   },
 
@@ -574,6 +584,7 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
   },
 
   closeTerminal: async (id: TerminalId) => {
+    const t0 = performance.now();
     const { terminals, layout, focusedTerminalId } = get();
     const instance = terminals.get(id);
     if (!instance) return;
@@ -582,6 +593,7 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
       await window.terminalAPI.closeDetached(id);
     }
     await window.terminalAPI.killPty(id);
+    const t1 = performance.now();
 
     const newTerminals = new Map(terminals);
     newTerminals.delete(id);
@@ -627,6 +639,12 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
       layout: { tilingRoot: newRoot, floatingPanels: newFloating },
       focusedTerminalId: newFocus,
       preGridRoot: newPreGridRoot,
+    });
+    window.terminalAPI.diagLog('renderer:close-terminal', {
+      id,
+      killMs: Math.round(t1 - t0),
+      totalMs: Math.round(performance.now() - t0),
+      remaining: newTerminals.size,
     });
   },
 
@@ -884,6 +902,7 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
   },
 
   moveToDormant: (id: TerminalId) => {
+    const t0 = performance.now();
     const { terminals, layout, focusedTerminalId } = get();
     const instance = terminals.get(id);
     if (!instance || instance.mode === 'dormant') return;
@@ -915,9 +934,16 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
       layout: { tilingRoot: newRoot, floatingPanels: newFloating },
       focusedTerminalId: newFocus,
     });
+    window.terminalAPI.diagLog('renderer:move-to-dormant', {
+      id,
+      ms: Math.round(performance.now() - t0),
+      remaining: newRoot ? getLeafOrder(newRoot).length : 0,
+      newFocus,
+    });
   },
 
   wakeFromDormant: (id: TerminalId) => {
+    const t0 = performance.now();
     const { terminals, layout } = get();
     const instance = terminals.get(id);
     if (!instance || instance.mode !== 'dormant') return;
@@ -969,6 +995,11 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
       terminals: newTerminals,
       layout: { ...layout, tilingRoot: newRoot },
       focusedTerminalId: id,
+    });
+    window.terminalAPI.diagLog('renderer:wake-from-dormant', {
+      id,
+      ms: Math.round(performance.now() - t0),
+      tiled: newRoot ? getLeafOrder(newRoot).length : 0,
     });
   },
 
@@ -1175,6 +1206,12 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
   setTabBarPosition: (pos: 'top' | 'bottom' | 'left' | 'right') => {
     set({ tabBarPosition: pos });
     get().updateConfig({ tabBarPosition: pos } as any);
+  },
+
+  toggleHideTabTitles: () => {
+    const val = !get().hideTabTitles;
+    set({ hideTabTitles: val });
+    get().updateConfig({ hideTabTitles: val } as any);
   },
 
   startRenaming: (id: TerminalId | null) => {
@@ -1691,6 +1728,14 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
       isDragging,
       draggedTerminalId: isDragging ? (terminalId ?? null) : null,
     });
+  },
+
+  // ── Prompts dialog actions ─────────────────────────────────────────
+  showPromptsForTerminal: (terminalId: TerminalId) => {
+    set({ promptsDialogRequest: { terminalId } });
+  },
+  clearPromptsDialogRequest: () => {
+    set({ promptsDialogRequest: null });
   },
 
   // ── Copilot panel actions ──────────────────────────────────────────

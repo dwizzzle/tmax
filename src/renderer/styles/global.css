@@ -986,6 +986,13 @@ body,
   margin: 4px 8px;
 }
 
+.context-menu-shortcut {
+  margin-left: auto;
+  padding-left: 16px;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
 .context-menu-label {
   padding: 4px 14px 2px;
   color: var(--text-secondary);
@@ -2527,8 +2534,17 @@ select.settings-input {
   align-items: flex-start;
 }
 
-.ai-prompt-item:hover {
-  background: rgba(137, 180, 250, 0.06);
+.ai-prompt-item.clickable {
+  cursor: pointer;
+}
+
+.ai-prompt-item:hover,
+.ai-prompt-item.selected {
+  background: rgba(137, 180, 250, 0.08);
+}
+
+.ai-prompt-item.selected {
+  background: rgba(137, 180, 250, 0.12);
 }
 
 .ai-prompt-index {
@@ -2557,6 +2573,11 @@ select.settings-input {
   border-top: 1px solid var(--border-color);
   font-size: 11px;
   color: var(--text-secondary);
+}
+
+.ai-prompts-hint {
+  color: var(--text-tertiary, var(--text-secondary));
+  opacity: 0.7;
 }
 
 .ai-session-rename-input {

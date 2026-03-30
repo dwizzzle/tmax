@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import ReactDOM from 'react-dom';
 import { useTerminalStore } from '../state/terminal-store';
+import { getTerminalEntry } from '../terminal-registry';
 import type { CopilotSessionSummary, CopilotSessionStatus, SessionProvider } from '../../shared/copilot-types';
 
 const MIN_WIDTH = 180;
@@ -91,7 +92,7 @@ const CopilotPanel: React.FC = () => {
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; session: CopilotSessionSummary } | null>(null);
   const [renaming, setRenaming] = useState<{ id: string; provider: SessionProvider; value: string } | null>(null);
   const [summaryOverrides, setSummaryOverrides] = useState<Record<string, string>>({});
-  const [promptsDialog, setPromptsDialog] = useState<{ title: string; prompts: string[] } | null>(null);
+  const [promptsDialog, setPromptsDialog] = useState<{ title: string; prompts: string[]; terminalId: string | null } | null>(null);
   const [showRunningOnly, setShowRunningOnly] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -219,9 +220,19 @@ const CopilotPanel: React.FC = () => {
     } else {
       prompts = await api.getCopilotPrompts(session.id);
     }
+    // Find terminal with matching aiSessionId
+    let matchedTerminalId: string | null = null;
+    const store = useTerminalStore.getState();
+    for (const [tid, t] of store.terminals) {
+      if (t.aiSessionId === session.id) {
+        matchedTerminalId = tid;
+        break;
+      }
+    }
     setPromptsDialog({
       title: summaryOverrides[session.id] || session.summary || getTitle(session),
       prompts: prompts.length > 0 ? prompts : ['(no prompts found)'],
+      terminalId: matchedTerminalId,
     });
     setCtxMenu(null);
   }, [summaryOverrides]);
@@ -303,7 +314,47 @@ const CopilotPanel: React.FC = () => {
     store.searchClaudeCodeSessions(value);
   }, []);
 
-  if (!show) return null;
+  // Listen for keybinding-triggered prompts dialog request
+  const promptsRequest = useTerminalStore((s) => s.promptsDialogRequest);
+  useEffect(() => {
+    if (!promptsRequest) return;
+    const { terminalId: tid } = promptsRequest;
+    const store = useTerminalStore.getState();
+    store.clearPromptsDialogRequest();
+    // Find the AI session for this terminal
+    const terminal = store.terminals.get(tid);
+    if (!terminal?.aiSessionId) return;
+    const sessionId = terminal.aiSessionId;
+    // Find session metadata
+    const allSessions = [...store.copilotSessions, ...store.claudeCodeSessions];
+    const session = allSessions.find((s) => s.id === sessionId);
+    if (!session) return;
+    // Load prompts
+    const api = window.terminalAPI as any;
+    const loadPrompts = session.provider === 'claude-code'
+      ? api.getClaudeCodePrompts(sessionId)
+      : api.getCopilotPrompts(sessionId);
+    loadPrompts.then((prompts: string[]) => {
+      setPromptsDialog({
+        title: summaryOverrides[sessionId] || session.summary || getTitle(session),
+        prompts: prompts.length > 0 ? prompts : ['(no prompts found)'],
+        terminalId: tid,
+      });
+    });
+  }, [promptsRequest, summaryOverrides]);
+
+  // Always render the prompts dialog portal (even when panel is hidden)
+  const promptsPortal = promptsDialog && ReactDOM.createPortal(
+    <PromptsDialog
+      title={promptsDialog.title}
+      prompts={promptsDialog.prompts}
+      terminalId={promptsDialog.terminalId}
+      onClose={() => setPromptsDialog(null)}
+    />,
+    document.body,
+  );
+
+  if (!show) return promptsPortal || null;
 
   // Counts for filter tabs (deduplicated)
   const copilotCount = copilotSessions.filter((s) => s.messageCount > 0).length;
@@ -453,14 +504,7 @@ const CopilotPanel: React.FC = () => {
         )}
       </div>
 
-      {promptsDialog && ReactDOM.createPortal(
-        <PromptsDialog
-          title={promptsDialog.title}
-          prompts={promptsDialog.prompts}
-          onClose={() => setPromptsDialog(null)}
-        />,
-        document.body,
-      )}
+      {promptsPortal}
 
       {ctxMenu && (
         <div ref={ctxRef} className="context-menu" style={{ left: ctxMenu.x, top: ctxMenu.y, zIndex: 1000 }}>
@@ -501,10 +545,13 @@ const CopilotPanel: React.FC = () => {
 const PromptsDialog: React.FC<{
   title: string;
   prompts: string[];
+  terminalId: string | null;
   onClose: () => void;
-}> = ({ title, prompts, onClose }) => {
+}> = ({ title, prompts, terminalId, onClose }) => {
   const [search, setSearch] = useState('');
+  const [selectedIndex, setSelectedIndex] = useState(0);
   const searchRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     requestAnimationFrame(() => searchRef.current?.focus());
@@ -517,6 +564,62 @@ const PromptsDialog: React.FC<{
     const q = search.toLowerCase();
     return reversed.filter((p) => p.toLowerCase().includes(q));
   }, [reversed, search]);
+
+  // Reset selection when filter changes
+  useEffect(() => { setSelectedIndex(0); }, [filtered]);
+
+  // Scroll selected item into view
+  useEffect(() => {
+    const list = listRef.current;
+    if (!list) return;
+    const item = list.children[selectedIndex] as HTMLElement | undefined;
+    item?.scrollIntoView({ block: 'nearest' });
+  }, [selectedIndex]);
+
+  const jumpToPrompt = useCallback((promptText: string) => {
+    if (!terminalId) return;
+    const entry = getTerminalEntry(terminalId);
+    if (!entry) return;
+    const { searchAddon, terminal } = entry;
+    // Clear any previous search decorations
+    searchAddon.clearDecorations();
+    // Search for the prompt text (first ~80 chars to avoid overly long searches)
+    const query = promptText.slice(0, 80);
+    const opts = {
+      decorations: {
+        matchOverviewRuler: '#888',
+        activeMatchColorOverviewRuler: '#fff',
+        matchBackground: '#585b70',
+        activeMatchBackground: '#89b4fa',
+      },
+    };
+    searchAddon.findPrevious(query, opts);
+    // Close dialog and focus the terminal
+    onClose();
+    requestAnimationFrame(() => terminal.focus());
+  }, [terminalId, onClose]);
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') { onClose(); e.stopPropagation(); return; }
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setSelectedIndex((i) => Math.min(i + 1, filtered.length - 1));
+      return;
+    }
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setSelectedIndex((i) => Math.max(i - 1, 0));
+      return;
+    }
+    if (e.key === 'Enter' && filtered.length > 0) {
+      e.preventDefault();
+      jumpToPrompt(filtered[selectedIndex]);
+      return;
+    }
+    e.stopPropagation();
+  }, [filtered, selectedIndex, jumpToPrompt, onClose]);
+
+  const canJump = !!terminalId;
 
   return (
     <div className="palette-backdrop" onClick={onClose}>
@@ -532,24 +635,27 @@ const PromptsDialog: React.FC<{
           placeholder="Search prompts..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Escape') onClose(); e.stopPropagation(); }}
+          onKeyDown={handleKeyDown}
         />
-        <div className="ai-prompts-list">
-          {filtered.map((p, i) => {
-            const originalIndex = prompts.length - prompts.indexOf(filtered[i]);
-            return (
-              <div key={i} className="ai-prompt-item">
-                <span className="ai-prompt-index">{prompts.length - reversed.indexOf(p)}</span>
-                <span className="ai-prompt-text">{p}</span>
-              </div>
-            );
-          })}
+        <div className="ai-prompts-list" ref={listRef}>
+          {filtered.map((p, i) => (
+            <div
+              key={i}
+              className={`ai-prompt-item${i === selectedIndex ? ' selected' : ''}${canJump ? ' clickable' : ''}`}
+              onClick={() => canJump && jumpToPrompt(p)}
+              onMouseEnter={() => setSelectedIndex(i)}
+            >
+              <span className="ai-prompt-index">{prompts.length - reversed.indexOf(p)}</span>
+              <span className="ai-prompt-text">{p}</span>
+            </div>
+          ))}
           {filtered.length === 0 && (
             <div className="dir-panel-empty">No matching prompts</div>
           )}
         </div>
         <div className="ai-prompts-footer">
           {filtered.length} of {prompts.length} prompts
+          {canJump && <span className="ai-prompts-hint"> · click or Enter to jump</span>}
         </div>
       </div>
     </div>

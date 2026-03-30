@@ -30,6 +30,7 @@ const App: React.FC = () => {
   const showShortcuts = useTerminalStore((s) => s.showShortcuts);
   const showCommandPalette = useTerminalStore((s) => s.showCommandPalette);
   const tabBarPosition = useTerminalStore((s) => s.tabBarPosition);
+  const hideTabBar = useTerminalStore((s) => s.hideTabTitles);
 
   useKeybindings();
 
@@ -84,6 +85,18 @@ const App: React.FC = () => {
       }
     }, 5000);
 
+    // Renderer heartbeat — logs every 30s so we can detect renderer freezes
+    // vs machine sleep in diagnostic logs.
+    let heartbeatSeq = 0;
+    const heartbeatInterval = setInterval(() => {
+      const s = useTerminalStore.getState();
+      window.terminalAPI.diagLog('renderer:heartbeat', {
+        seq: ++heartbeatSeq,
+        terminals: s.terminals.size,
+        focused: s.focusedTerminalId ?? 'none',
+      });
+    }, 30000);
+
     // Listen for detached windows being closed
     const unsubDetached = window.terminalAPI.onDetachedClosed?.((id: string) => {
       useTerminalStore.getState().reattachTerminal(id);
@@ -94,6 +107,7 @@ const App: React.FC = () => {
       document.removeEventListener('wheel', handleGlobalWheel);
       window.removeEventListener('beforeunload', handleBeforeUnload);
       clearInterval(autoSaveInterval);
+      clearInterval(heartbeatInterval);
       unsubDetached?.();
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -149,9 +163,9 @@ const App: React.FC = () => {
       onDragEnd={handleDragEnd}
     >
       <div className={`app-shell tab-bar-${tabBarPosition}`}>
-        {tabBarPosition === 'top' && <TabBar />}
+        {!hideTabBar && tabBarPosition === 'top' && <TabBar />}
         <div className="content-row">
-          {tabBarPosition === 'left' && <TabBar vertical />}
+          {!hideTabBar && tabBarPosition === 'left' && <TabBar vertical />}
           <div className="main-area">
             <DirPanel />
             <CopilotPanel />
@@ -168,9 +182,9 @@ const App: React.FC = () => {
               <DropZoneOverlay />
             </div>
           </div>
-          {tabBarPosition === 'right' && <TabBar vertical side="right" />}
+          {!hideTabBar && tabBarPosition === 'right' && <TabBar vertical side="right" />}
         </div>
-        {tabBarPosition === 'bottom' && <TabBar />}
+        {!hideTabBar && tabBarPosition === 'bottom' && <TabBar />}
         <StatusBar />
         <TerminalSwitcher />
         <PaneHintOverlay />

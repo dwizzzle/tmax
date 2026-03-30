@@ -74,6 +74,8 @@ const DEFAULT_BINDINGS: Record<string, string> = {
   'Ctrl+Shift+Alt+ArrowRight': 'resizeRight',
   'Ctrl+Shift+M': 'tabMenu',
   'Ctrl+Shift+C': 'copilotPanel',
+  'Ctrl+Shift+I': 'showPrompts',
+  'Ctrl+Shift+B': 'hideTabBar',
   'Ctrl+Shift+L': 'cycleGridColumns',
   'Ctrl+Shift+O': 'colorizeAllTabs',
 };
@@ -230,6 +232,12 @@ function dispatchAction(action: string): void {
       break;
     case 'copilotPanel':
       store.toggleCopilotPanel();
+      break;
+    case 'showPrompts':
+      if (focusedId) store.showPromptsForTerminal(focusedId);
+      break;
+    case 'hideTabBar':
+      store.toggleHideTabTitles();
       break;
     case 'cycleGridColumns':
       store.cycleGridColumns();

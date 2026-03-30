@@ -105,6 +105,7 @@ const StatusBar: React.FC = () => {
   const viewMode = useTerminalStore((s) => s.viewMode);
   const gridColumns = useTerminalStore((s) => s.gridColumns);
   const hasAnyColor = useTerminalStore((s) => s.autoColorTabs);
+  const hideTabBar = useTerminalStore((s) => s.hideTabTitles);
   const focused = focusedId ? terminals.get(focusedId) : null;
   const totalCount = terminals.size;
   const tiledCount = layout.tilingRoot ? getLeafOrder(layout.tilingRoot).length : 0;
@@ -114,6 +115,13 @@ const StatusBar: React.FC = () => {
     <>
       <div className="status-bar">
         <div className="status-section status-left">
+          <button
+            className="status-mode-btn"
+            onClick={() => useTerminalStore.getState().toggleHideTabTitles()}
+            title="Toggle Tab Bar (Ctrl+Shift+B)"
+          >
+            &#9776; Tabs
+          </button>
           <button
             className="status-mode-btn"
             onClick={() => useTerminalStore.getState().toggleDirPicker()}
