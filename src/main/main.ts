@@ -101,6 +101,26 @@ function getWindowMaterialOpts(): { backgroundMaterial?: BackgroundMaterial; bac
   return { backgroundColor: themeBg };
 }
 
+/**
+ * Applies the current background material and color to a window.
+ * Separated from getWindowMaterialOpts so material can be applied *after*
+ * window creation / maximize — passing backgroundMaterial in the BrowserWindow
+ * constructor causes Windows 11 to grey-out the maximize button (Electron bug).
+ */
+function applyMaterialToWindow(win: BrowserWindow): void {
+  if (!platformSupportsMaterial() || win.isDestroyed()) return;
+  const material = (configStore?.get('backgroundMaterial') as BackgroundMaterial) || 'none';
+  const opacity = configStore?.get('backgroundOpacity') as number ?? 0.8;
+  const themeBg = configStore?.get('theme')?.background || '#1e1e2e';
+
+  (win as any).setBackgroundMaterial(material);
+  if (material !== 'none') {
+    win.setBackgroundColor(hexWithAlpha(themeBg, opacity));
+  } else {
+    win.setBackgroundColor(themeBg);
+  }
+}
+
 let mainWindow: BrowserWindow | null = null;
 let ptyManager: PtyManager | null = null;
 let configStore: ConfigStore | null = null;
@@ -122,7 +142,11 @@ function broadcastPtyEvent(channel: string, id: string, ...args: unknown[]) {
 }
 
 function createWindow(): void {
-  const materialOpts = getWindowMaterialOpts();
+  // Intentionally omit backgroundMaterial from the constructor — passing it at
+  // creation time causes Windows 11 to grey-out the native maximize button
+  // (upstream Electron bug).  We apply the material *after* the window is
+  // shown and maximized via applyMaterialToWindow().
+  const { backgroundMaterial: _mat, ...constructorOpts } = getWindowMaterialOpts();
 
   mainWindow = new BrowserWindow({
     width: 1200,
@@ -133,7 +157,7 @@ function createWindow(): void {
     title: 'tmax',
     icon: path.join(__dirname, '../../assets/icon.png'),
     autoHideMenuBar: true,
-    ...materialOpts,
+    ...constructorOpts,
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
@@ -169,6 +193,9 @@ function createWindow(): void {
     mainWindow!.show();
     mainWindow!.focus();
 
+    // Apply background material *after* the window is visible and maximized
+    // so the native maximize button stays enabled.
+    applyMaterialToWindow(mainWindow!);
     // Force DWM to repaint the non-client area (title bar) so the old-style
     // Win32 chrome is replaced by the themed frame when a background material
     // (mica / acrylic / tabbed) is active.
@@ -176,6 +203,11 @@ function createWindow(): void {
       (mainWindow as any).setBackgroundMaterial(materialOpts.backgroundMaterial);
     }
   });
+
+  // Re-apply background material after maximize / restore state transitions
+  // to prevent the Mica/Acrylic effect from disappearing.
+  mainWindow.on('maximize', () => { applyMaterialToWindow(mainWindow!); });
+  mainWindow.on('unmaximize', () => { applyMaterialToWindow(mainWindow!); });
 
   // Prevent Chromium's built-in zoom — reset zoom level after any zoom attempt
   mainWindow.webContents.on('before-input-event', (_event, input) => {
@@ -308,18 +340,10 @@ function registerIpcHandlers(): void {
 
       // Dynamically apply background material changes
       if (key === 'backgroundMaterial' || key === 'backgroundOpacity' || key === 'theme') {
-        const material = (configStore!.get('backgroundMaterial') || 'none') as BackgroundMaterial;
-        const opacity = configStore!.get('backgroundOpacity') as number ?? 0.8;
-        const themeBg = configStore!.get('theme')?.background || '#1e1e2e';
         const allWindows = [mainWindow, ...detachedWindows.values()];
         for (const win of allWindows) {
-          if (win && !win.isDestroyed() && platformSupportsMaterial()) {
-            (win as any).setBackgroundMaterial(material);
-            if (material !== 'none') {
-              win.setBackgroundColor(hexWithAlpha(themeBg, opacity));
-            } else {
-              win.setBackgroundColor(themeBg);
-            }
+          if (win && !win.isDestroyed()) {
+            applyMaterialToWindow(win);
           }
         }
       }
@@ -352,14 +376,15 @@ function registerIpcHandlers(): void {
       }
     }
 
-    const detachedMaterialOpts = getWindowMaterialOpts();
+    // Omit backgroundMaterial from constructor — same workaround as main window.
+    const { backgroundMaterial: _dMat, ...detachedConstructorOpts } = getWindowMaterialOpts();
     const detachedWin = new BrowserWindow({
       width: 800,
       height: 600,
       show: false,
       title: 'tmax - Terminal',
       autoHideMenuBar: true,
-      ...detachedMaterialOpts,
+      ...detachedConstructorOpts,
       webPreferences: {
         contextIsolation: true,
         nodeIntegration: false,
@@ -378,6 +403,11 @@ function registerIpcHandlers(): void {
       }
     });
     detachedWindows.set(terminalId, detachedWin);
+
+    // Apply background material after window is ready (deferred).
+    detachedWin.once('ready-to-show', () => { applyMaterialToWindow(detachedWin); });
+    detachedWin.on('maximize', () => { applyMaterialToWindow(detachedWin); });
+    detachedWin.on('unmaximize', () => { applyMaterialToWindow(detachedWin); });
 
     // Open external links in the default browser for detached windows too
     detachedWin.webContents.setWindowOpenHandler(({ url }) => {
@@ -507,27 +537,13 @@ function registerIpcHandlers(): void {
     // Persist to config
     configStore!.set('backgroundMaterial', mat);
 
-    const opacity = configStore?.get('backgroundOpacity') as number ?? 0.8;
-    const themeBg = configStore?.get('theme')?.background || '#1e1e2e';
-
-    // Apply to main window
+    // Apply to all windows via the shared helper
     if (mainWindow && !mainWindow.isDestroyed()) {
-      (mainWindow as any).setBackgroundMaterial(mat);
-      if (mat !== 'none') {
-        mainWindow.setBackgroundColor(hexWithAlpha(themeBg, opacity));
-      } else {
-        mainWindow.setBackgroundColor(themeBg);
-      }
+      applyMaterialToWindow(mainWindow);
     }
-    // Apply to all detached windows
     for (const [, win] of detachedWindows) {
       if (!win.isDestroyed()) {
-        (win as any).setBackgroundMaterial(mat);
-        if (mat !== 'none') {
-          win.setBackgroundColor(hexWithAlpha(themeBg, opacity));
-        } else {
-          win.setBackgroundColor(themeBg);
-        }
+        applyMaterialToWindow(win);
       }
     }
   });
